@@ -1,0 +1,7 @@
+num_layers: 2
+num_blocks_per_layer: 4
+block_size_bytes: 4096
+locations:
+  - ssd
+  - dram
+  - vram

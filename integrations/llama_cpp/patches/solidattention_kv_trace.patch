@@ -1,0 +1,2388 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 320784c..3071466 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -55,6 +55,21 @@ target_compile_features   (llama PRIVATE cxx_std_17) # don't bump
+ 
+ target_link_libraries(llama PUBLIC ggml)
+ 
++set(LLAMA_SOLIDATTENTION_LIBURING_PREFIX "" CACHE PATH "Optional liburing prefix for SolidAttention executor stub")
++find_path(LLAMA_SOLIDATTENTION_LIBURING_INCLUDE_DIR liburing.h
++    HINTS "${LLAMA_SOLIDATTENTION_LIBURING_PREFIX}/include")
++find_library(LLAMA_SOLIDATTENTION_LIBURING_LIBRARY uring
++    HINTS "${LLAMA_SOLIDATTENTION_LIBURING_PREFIX}/lib")
++if (LLAMA_SOLIDATTENTION_LIBURING_INCLUDE_DIR AND LLAMA_SOLIDATTENTION_LIBURING_LIBRARY)
++    target_include_directories(llama PRIVATE "${LLAMA_SOLIDATTENTION_LIBURING_INCLUDE_DIR}")
++    target_link_libraries(llama PRIVATE "${LLAMA_SOLIDATTENTION_LIBURING_LIBRARY}")
++    target_compile_definitions(llama PRIVATE LLAMA_SOLIDATTENTION_HAVE_LIBURING=1)
++    if (UNIX AND NOT APPLE)
++        get_filename_component(LLAMA_SOLIDATTENTION_LIBURING_LIBRARY_DIR "${LLAMA_SOLIDATTENTION_LIBURING_LIBRARY}" DIRECTORY)
++        target_link_options(llama PRIVATE "-Wl,-rpath,${LLAMA_SOLIDATTENTION_LIBURING_LIBRARY_DIR}")
++    endif()
++endif()
++
+ if (BUILD_SHARED_LIBS)
+     set_target_properties(llama PROPERTIES POSITION_INDEPENDENT_CODE ON)
+     target_compile_definitions(llama PRIVATE LLAMA_BUILD)
+diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
+index e70583e..1f2f92d 100644
+--- a/src/llama-kv-cache.cpp
++++ b/src/llama-kv-cache.cpp
+@@ -8,15 +8,2155 @@
+ #include <algorithm>
+ #include <cassert>
+ #include <cmath>
++#include <cerrno>
++#include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <limits>
++
++#if defined(LLAMA_SOLIDATTENTION_HAVE_LIBURING)
++#include <fcntl.h>
++#include <unistd.h>
++#include <liburing.h>
++#endif
+ #include <map>
+ #include <stdexcept>
+ 
+-static bool ggml_is_power_of_2(int n) {
+-    return (n & (n - 1)) == 0;
++static bool ggml_is_power_of_2(int n) {
++    return (n & (n - 1)) == 0;
++}
++
++static bool llama_solidattention_kv_trace_enabled() {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_TRACE_PATH");
++    return path && path[0] != '\0';
++}
++
++static void llama_solidattention_kv_trace_event(
++        const char * op,
++        const char * event,
++             int32_t layer_id,
++            uint32_t block_id,
++             int64_t start_token,
++             int64_t end_token,
++              size_t size_bytes,
++          const char * location,
++          const char * source,
++          const char * target,
++             int64_t ssd_offset,
++            uint32_t cache_size,
++            uint32_t n_tokens,
++            uint32_t n_stream) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_TRACE_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "a");
++    if (!fp) {
++        return;
++    }
++
++    std::fprintf(fp,
++            "{\"op\":\"%s\",\"layer_id\":%d,\"block_id\":%u,"
++            "\"start_token\":%lld,\"end_token\":%lld,\"size_bytes\":%zu,"
++            "\"location\":\"%s\",\"source\":\"%s\",\"target\":\"%s\","
++            "\"ssd_offset\":%lld,\"metadata\":{\"source\":\"llama.cpp\","
++            "\"event\":\"%s\",\"cache_size\":%u,"
++            "\"n_tokens\":%u,\"n_stream\":%u}}\n",
++            op,
++            layer_id,
++            block_id,
++            (long long) start_token,
++            (long long) end_token,
++            size_bytes,
++            location ? location : "",
++            source ? source : "",
++            target ? target : "",
++            (long long) ssd_offset,
++            event,
++            cache_size,
++            n_tokens,
++            n_stream);
++
++    std::fclose(fp);
++}
++
++static bool llama_solidattention_kv_command_enabled() {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_PATH");
++    return path && path[0] != '\0';
++}
++
++static bool llama_solidattention_kv_command_bridge_enabled() {
++    const char * trace_path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_BRIDGE_TRACE_PATH");
++    const char * summary_path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_BRIDGE_SUMMARY_PATH");
++    return (trace_path && trace_path[0] != '\0') || (summary_path && summary_path[0] != '\0');
++}
++
++static bool llama_solidattention_kv_executor_enabled() {
++    const char * backing_path = std::getenv("LLAMA_SOLIDATTENTION_KV_EXECUTOR_BACKING_PATH");
++    return backing_path && backing_path[0] != '\0';
++}
++
++static bool llama_solidattention_kv_tensor_dry_run_enabled() {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_TENSOR_DRY_RUN_TRACE_PATH");
++    if (path && path[0] != '\0') {
++        return true;
++    }
++
++    const char * value = std::getenv("LLAMA_SOLIDATTENTION_KV_TENSOR_DRY_RUN");
++    return value && (
++            std::strcmp(value, "1") == 0 ||
++            std::strcmp(value, "true") == 0 ||
++            std::strcmp(value, "yes") == 0);
++}
++
++static bool llama_solidattention_kv_tensor_mutation_enabled() {
++    const char * value = std::getenv("LLAMA_SOLIDATTENTION_KV_TENSOR_MUTATION");
++    return value && (
++            std::strcmp(value, "1") == 0 ||
++            std::strcmp(value, "true") == 0 ||
++            std::strcmp(value, "yes") == 0);
++}
++
++static bool llama_solidattention_kv_attention_gate_enabled() {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_ATTENTION_GATE_TRACE_PATH");
++    if (path && path[0] != '\0') {
++        return true;
++    }
++
++    const char * value = std::getenv("LLAMA_SOLIDATTENTION_KV_ATTENTION_GATE");
++    return value && (
++            std::strcmp(value, "1") == 0 ||
++            std::strcmp(value, "true") == 0 ||
++            std::strcmp(value, "yes") == 0);
++}
++
++static const char * llama_solidattention_kv_executor_backend_name() {
++    const char * requested = std::getenv("LLAMA_SOLIDATTENTION_KV_EXECUTOR_BACKEND");
++    if (requested && std::strcmp(requested, "stdio") == 0) {
++        return "stdio_backing_file_stub";
++    }
++#if defined(LLAMA_SOLIDATTENTION_HAVE_LIBURING)
++    if (!requested || requested[0] == '\0' || std::strcmp(requested, "liburing") == 0) {
++        return "liburing_backing_file_stub";
++    }
++#endif
++    return "stdio_backing_file_stub";
++}
++
++struct llama_solidattention_kv_command_summary {
++    uint32_t command_count = 0;
++    uint32_t valid_command_count = 0;
++    uint32_t kv_load_count = 0;
++    uint32_t kv_prefetch_count = 0;
++    uint32_t kv_compute_count = 0;
++    uint32_t kv_evict_count = 0;
++    uint32_t ssd_read_command_count = 0;
++    uint32_t ssd_write_command_count = 0;
++    uint64_t ssd_read_bytes = 0;
++    uint64_t ssd_write_bytes = 0;
++    uint32_t invalid_command_count = 0;
++    uint32_t missing_field_count = 0;
++    uint32_t unknown_op_count = 0;
++    uint32_t unknown_layer_count = 0;
++    uint32_t out_of_range_block_count = 0;
++    uint32_t invalid_token_range_count = 0;
++    uint32_t invalid_size_count = 0;
++    uint32_t invalid_location_count = 0;
++    uint32_t command_file_open_error = 0;
++    uint32_t layer_count = 0;
++    uint32_t cache_size = 0;
++};
++
++struct llama_solidattention_kv_command_record {
++    char op[32];
++    char source[16];
++    char target[16];
++    int64_t layer_id = -1;
++    int64_t block_id = -1;
++    int64_t start_token = -1;
++    int64_t end_token = -1;
++    int64_t size_bytes = -1;
++    int64_t ssd_offset = -1;
++    bool blocking = false;
++};
++
++struct llama_solidattention_kv_shadow_record {
++    int64_t layer_id = -1;
++    int64_t block_id = -1;
++    int64_t start_token = -1;
++    int64_t end_token = -1;
++    char location[16];
++};
++
++struct llama_solidattention_kv_staging_record {
++    int64_t layer_id = -1;
++    int64_t block_id = -1;
++    int64_t start_token = -1;
++    int64_t end_token = -1;
++    int64_t size_bytes = 0;
++    void * dram_buffer = nullptr;
++    void * vram_buffer = nullptr;
++    bool byte_range_checked = false;
++    bool tensor_dry_run_checked = false;
++    bool tensor_mutation_checked = false;
++    uint64_t key_row_size_bytes = 0;
++    uint64_t value_row_size_bytes = 0;
++};
++
++struct llama_solidattention_kv_command_bridge_summary {
++    uint32_t runtime_layer_event_count = 0;
++    uint32_t matched_command_count = 0;
++    uint32_t unmatched_layer_event_count = 0;
++    uint32_t kv_load_count = 0;
++    uint32_t kv_prefetch_count = 0;
++    uint32_t kv_compute_count = 0;
++    uint32_t kv_evict_count = 0;
++    uint32_t ssd_read_command_count = 0;
++    uint32_t ssd_write_command_count = 0;
++    uint64_t ssd_read_bytes = 0;
++    uint64_t ssd_write_bytes = 0;
++    uint32_t movement_intent_count = 0;
++    uint32_t blocking_movement_intent_count = 0;
++    uint32_t nonblocking_movement_intent_count = 0;
++    uint32_t ssd_read_intent_count = 0;
++    uint64_t ssd_read_intent_bytes = 0;
++    uint32_t dram_to_vram_intent_count = 0;
++    uint64_t dram_to_vram_intent_bytes = 0;
++    uint32_t compute_intent_count = 0;
++    uint64_t compute_intent_bytes = 0;
++    uint32_t ssd_write_intent_count = 0;
++    uint64_t ssd_write_intent_bytes = 0;
++    uint32_t executor_enabled = 0;
++    uint32_t executor_metadata_only_count = 0;
++    uint32_t executor_ssd_read_attempt_count = 0;
++    uint32_t executor_ssd_read_success_count = 0;
++    uint32_t executor_ssd_read_error_count = 0;
++    uint32_t executor_open_error_count = 0;
++    uint32_t executor_seek_error_count = 0;
++    uint32_t executor_short_read_count = 0;
++    uint32_t executor_alloc_error_count = 0;
++    uint32_t executor_backend_error_count = 0;
++    uint64_t executor_ssd_read_bytes = 0;
++    uint32_t executor_staging_record_count = 0;
++    uint32_t executor_dram_buffer_count = 0;
++    uint64_t executor_dram_buffer_bytes = 0;
++    uint32_t executor_vram_buffer_count = 0;
++    uint64_t executor_vram_buffer_bytes = 0;
++    uint32_t executor_lazy_source_seed_count = 0;
++    uint64_t executor_lazy_source_seed_bytes = 0;
++    uint32_t executor_dram_to_vram_copy_count = 0;
++    uint64_t executor_dram_to_vram_copy_bytes = 0;
++    uint32_t executor_compute_resident_count = 0;
++    uint64_t executor_compute_resident_bytes = 0;
++    uint32_t executor_evict_count = 0;
++    uint64_t executor_evict_bytes = 0;
++    uint32_t executor_missing_source_count = 0;
++    uint32_t executor_size_mismatch_count = 0;
++    uint32_t executor_staging_overflow_count = 0;
++    uint32_t executor_byte_range_block_count = 0;
++    uint32_t executor_byte_range_count = 0;
++    uint64_t executor_byte_range_mapped_bytes = 0;
++    uint64_t executor_byte_range_key_bytes = 0;
++    uint64_t executor_byte_range_value_bytes = 0;
++    uint32_t executor_byte_range_inferred_row_size_count = 0;
++    uint32_t executor_byte_range_size_mismatch_count = 0;
++    uint32_t executor_byte_range_tensor_bounds_error_count = 0;
++    uint32_t executor_tensor_dry_run_enabled = 0;
++    uint32_t executor_tensor_dry_run_block_count = 0;
++    uint32_t executor_tensor_dry_run_range_count = 0;
++    uint64_t executor_tensor_dry_run_bytes = 0;
++    uint64_t executor_tensor_dry_run_key_bytes = 0;
++    uint64_t executor_tensor_dry_run_value_bytes = 0;
++    uint32_t executor_tensor_dry_run_checksum_count = 0;
++    uint64_t executor_tensor_dry_run_checksum_xor = 0;
++    uint32_t executor_tensor_dry_run_size_mismatch_count = 0;
++    uint32_t executor_tensor_dry_run_tensor_bounds_error_count = 0;
++    uint32_t executor_tensor_mutation_enabled = 0;
++    uint32_t executor_tensor_mutation_attempt_count = 0;
++    uint32_t executor_tensor_mutation_block_count = 0;
++    uint32_t executor_tensor_mutation_range_count = 0;
++    uint64_t executor_tensor_mutation_bytes = 0;
++    uint64_t executor_tensor_mutation_key_bytes = 0;
++    uint64_t executor_tensor_mutation_value_bytes = 0;
++    uint32_t executor_tensor_mutation_checksum_count = 0;
++    uint64_t executor_tensor_mutation_staging_checksum_xor = 0;
++    uint64_t executor_tensor_mutation_post_checksum_xor = 0;
++    uint32_t executor_tensor_mutation_verify_error_count = 0;
++    uint32_t executor_tensor_mutation_size_mismatch_count = 0;
++    uint32_t executor_tensor_mutation_tensor_bounds_error_count = 0;
++    uint32_t executor_tensor_mutation_unsupported_count = 0;
++    uint32_t attention_gate_enabled = 0;
++    uint32_t attention_gate_view_count = 0;
++    uint32_t attention_gate_k_view_count = 0;
++    uint32_t attention_gate_v_view_count = 0;
++    uint32_t attention_gate_no_required_view_count = 0;
++    uint32_t attention_gate_required_block_count = 0;
++    uint32_t attention_gate_ready_block_count = 0;
++    uint32_t attention_gate_missing_block_count = 0;
++    uint32_t attention_gate_pending_mutation_count = 0;
++    uint32_t shadow_transition_count = 0;
++    uint32_t shadow_source_match_count = 0;
++    uint32_t shadow_source_mismatch_count = 0;
++    uint32_t shadow_block_count = 0;
++    uint32_t shadow_ssd_block_count = 0;
++    uint32_t shadow_dram_block_count = 0;
++    uint32_t shadow_vram_block_count = 0;
++    uint32_t command_record_count = 0;
++    uint32_t cache_size = 0;
++    uint32_t n_tokens_last = 0;
++    uint32_t n_stream_last = 0;
++};
++
++static const uint32_t LLAMA_SOLIDATTENTION_MAX_KV_COMMANDS = 4096;
++static const uint32_t LLAMA_SOLIDATTENTION_MAX_KV_SHADOW_BLOCKS = 4096;
++static const uint32_t LLAMA_SOLIDATTENTION_MAX_KV_STAGING_BLOCKS = 4096;
++static llama_solidattention_kv_command_record llama_solidattention_kv_command_records[LLAMA_SOLIDATTENTION_MAX_KV_COMMANDS];
++static llama_solidattention_kv_shadow_record llama_solidattention_kv_shadow_records[LLAMA_SOLIDATTENTION_MAX_KV_SHADOW_BLOCKS];
++static llama_solidattention_kv_staging_record llama_solidattention_kv_staging_records[LLAMA_SOLIDATTENTION_MAX_KV_STAGING_BLOCKS];
++static uint32_t llama_solidattention_kv_command_record_count = 0;
++static uint32_t llama_solidattention_kv_shadow_record_count = 0;
++static uint32_t llama_solidattention_kv_staging_record_count = 0;
++static bool llama_solidattention_kv_command_records_ready = false;
++static bool llama_solidattention_kv_command_records_valid = false;
++static llama_solidattention_kv_command_bridge_summary llama_solidattention_kv_bridge_summary;
++
++static const char * llama_solidattention_skip_json_ws(const char * pos) {
++    while (*pos == ' ' || *pos == '\t') {
++        ++pos;
++    }
++    return pos;
++}
++
++static const char * llama_solidattention_json_field(const char * line, const char * key) {
++    char pattern[96];
++    std::snprintf(pattern, sizeof(pattern), "\"%s\"", key);
++
++    const char * pos = std::strstr(line, pattern);
++    if (!pos) {
++        return nullptr;
++    }
++
++    pos += std::strlen(pattern);
++    pos = llama_solidattention_skip_json_ws(pos);
++    if (*pos != ':') {
++        return nullptr;
++    }
++
++    return llama_solidattention_skip_json_ws(pos + 1);
++}
++
++static bool llama_solidattention_json_string(const char * line, const char * key, char * out, size_t out_size) {
++    if (out_size == 0) {
++        return false;
++    }
++
++    const char * pos = llama_solidattention_json_field(line, key);
++    if (!pos || *pos != '\"') {
++        return false;
++    }
++
++    ++pos;
++    size_t n = 0;
++    while (*pos && *pos != '\"') {
++        if (*pos == '\\' || n + 1 >= out_size) {
++            return false;
++        }
++        out[n++] = *pos++;
++    }
++
++    if (*pos != '\"') {
++        return false;
++    }
++
++    out[n] = '\0';
++    return true;
++}
++
++static bool llama_solidattention_json_i64(const char * line, const char * key, int64_t * out) {
++    const char * pos = llama_solidattention_json_field(line, key);
++    if (!pos) {
++        return false;
++    }
++
++    char * end = nullptr;
++    const long long value = std::strtoll(pos, &end, 10);
++    if (end == pos) {
++        return false;
++    }
++
++    *out = (int64_t) value;
++    return true;
++}
++
++static bool llama_solidattention_json_bool(const char * line, const char * key, bool * out) {
++    const char * pos = llama_solidattention_json_field(line, key);
++    if (!pos) {
++        return false;
++    }
++
++    if (std::strncmp(pos, "true", 4) == 0) {
++        *out = true;
++        return true;
++    }
++
++    if (std::strncmp(pos, "false", 5) == 0) {
++        *out = false;
++        return true;
++    }
++
++    return false;
++}
++
++static bool llama_solidattention_has_layer_id(const std::vector<uint32_t> & layer_ids, int64_t layer_id) {
++    if (layer_id < 0) {
++        return false;
++    }
++
++    for (uint32_t candidate : layer_ids) {
++        if ((uint32_t) layer_id == candidate) {
++            return true;
++        }
++    }
++
++    return false;
++}
++
++static bool llama_solidattention_is_location(const char * value) {
++    return std::strcmp(value, "ssd") == 0 || std::strcmp(value, "dram") == 0 || std::strcmp(value, "vram") == 0;
++}
++
++static bool llama_solidattention_is_command_op(const char * op) {
++    return std::strcmp(op, "kv_load") == 0 ||
++        std::strcmp(op, "kv_prefetch") == 0 ||
++        std::strcmp(op, "kv_compute") == 0 ||
++        std::strcmp(op, "kv_evict") == 0;
++}
++
++static void llama_solidattention_record_command_counts(
++        llama_solidattention_kv_command_summary & summary,
++        const char * op,
++        const char * source,
++        const char * target,
++        int64_t size_bytes) {
++    if (std::strcmp(op, "kv_load") == 0) {
++        ++summary.kv_load_count;
++    } else if (std::strcmp(op, "kv_prefetch") == 0) {
++        ++summary.kv_prefetch_count;
++    } else if (std::strcmp(op, "kv_compute") == 0) {
++        ++summary.kv_compute_count;
++    } else if (std::strcmp(op, "kv_evict") == 0) {
++        ++summary.kv_evict_count;
++    }
++
++    ++summary.valid_command_count;
++
++    if ((std::strcmp(op, "kv_load") == 0 || std::strcmp(op, "kv_prefetch") == 0) && std::strcmp(source, "ssd") == 0) {
++        ++summary.ssd_read_command_count;
++        summary.ssd_read_bytes += (uint64_t) size_bytes;
++    }
++
++    if (std::strcmp(op, "kv_evict") == 0 && std::strcmp(target, "ssd") == 0) {
++        ++summary.ssd_write_command_count;
++        summary.ssd_write_bytes += (uint64_t) size_bytes;
++    }
++}
++
++static void llama_solidattention_store_command_record(
++        const char * op,
++        const char * source,
++        const char * target,
++        int64_t layer_id,
++        int64_t block_id,
++        int64_t start_token,
++        int64_t end_token,
++        int64_t size_bytes,
++        int64_t ssd_offset,
++        bool blocking) {
++    if (llama_solidattention_kv_command_record_count >= LLAMA_SOLIDATTENTION_MAX_KV_COMMANDS) {
++        return;
++    }
++
++    auto & record = llama_solidattention_kv_command_records[llama_solidattention_kv_command_record_count++];
++    std::snprintf(record.op, sizeof(record.op), "%s", op);
++    std::snprintf(record.source, sizeof(record.source), "%s", source);
++    std::snprintf(record.target, sizeof(record.target), "%s", target);
++    record.layer_id = layer_id;
++    record.block_id = block_id;
++    record.start_token = start_token;
++    record.end_token = end_token;
++    record.size_bytes = size_bytes;
++    record.ssd_offset = ssd_offset;
++    record.blocking = blocking;
++}
++
++static llama_solidattention_kv_shadow_record * llama_solidattention_find_or_create_shadow_record(
++        int64_t layer_id,
++        int64_t block_id,
++        int64_t start_token,
++        int64_t end_token,
++        const char * initial_location) {
++    for (uint32_t i = 0; i < llama_solidattention_kv_shadow_record_count; ++i) {
++        auto & record = llama_solidattention_kv_shadow_records[i];
++        if (record.layer_id == layer_id &&
++                record.block_id == block_id &&
++                record.start_token == start_token &&
++                record.end_token == end_token) {
++            return &record;
++        }
++    }
++
++    if (llama_solidattention_kv_shadow_record_count >= LLAMA_SOLIDATTENTION_MAX_KV_SHADOW_BLOCKS) {
++        return nullptr;
++    }
++
++    auto & record = llama_solidattention_kv_shadow_records[llama_solidattention_kv_shadow_record_count++];
++    record.layer_id = layer_id;
++    record.block_id = block_id;
++    record.start_token = start_token;
++    record.end_token = end_token;
++    std::snprintf(record.location, sizeof(record.location), "%s", initial_location ? initial_location : "unknown");
++    return &record;
++}
++
++static void llama_solidattention_reset_shadow_record_for_runtime_event(
++        int64_t layer_id,
++        int64_t block_id,
++        int64_t start_token,
++        int64_t end_token,
++        const char * initial_location) {
++    auto * record = llama_solidattention_find_or_create_shadow_record(layer_id, block_id, start_token, end_token, initial_location);
++    if (!record) {
++        return;
++    }
++
++    std::snprintf(record->location, sizeof(record->location), "%s", initial_location ? initial_location : "unknown");
++}
++
++static void llama_solidattention_refresh_shadow_location_counts() {
++    llama_solidattention_kv_bridge_summary.shadow_block_count = llama_solidattention_kv_shadow_record_count;
++    llama_solidattention_kv_bridge_summary.shadow_ssd_block_count = 0;
++    llama_solidattention_kv_bridge_summary.shadow_dram_block_count = 0;
++    llama_solidattention_kv_bridge_summary.shadow_vram_block_count = 0;
++
++    for (uint32_t i = 0; i < llama_solidattention_kv_shadow_record_count; ++i) {
++        const auto & record = llama_solidattention_kv_shadow_records[i];
++        if (std::strcmp(record.location, "ssd") == 0) {
++            ++llama_solidattention_kv_bridge_summary.shadow_ssd_block_count;
++        } else if (std::strcmp(record.location, "dram") == 0) {
++            ++llama_solidattention_kv_bridge_summary.shadow_dram_block_count;
++        } else if (std::strcmp(record.location, "vram") == 0) {
++            ++llama_solidattention_kv_bridge_summary.shadow_vram_block_count;
++        }
++    }
++}
++
++static void llama_solidattention_write_kv_command_summary(
++        const char * status,
++        const llama_solidattention_kv_command_summary & summary) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_SUMMARY_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "w");
++    if (!fp) {
++        return;
++    }
++
++    std::fprintf(fp,
++            "{\"contract\":\"solidattention.llama_cpp.kv_command_dry_run.v1\","
++            "\"backend\":\"llama.cpp\",\"adapter\":\"kv_command_dry_run\","
++            "\"status\":\"%s\",\"command_count\":%u,\"valid_command_count\":%u,"
++            "\"kv_load_count\":%u,\"kv_prefetch_count\":%u,\"kv_compute_count\":%u,\"kv_evict_count\":%u,"
++            "\"ssd_read_command_count\":%u,\"ssd_write_command_count\":%u,"
++            "\"ssd_read_bytes\":%llu,\"ssd_write_bytes\":%llu,"
++            "\"invalid_command_count\":%u,\"missing_field_count\":%u,\"unknown_op_count\":%u,"
++            "\"unknown_layer_count\":%u,\"out_of_range_block_count\":%u,"
++            "\"invalid_token_range_count\":%u,\"invalid_size_count\":%u,\"invalid_location_count\":%u,"
++            "\"command_file_open_error\":%u,\"layer_count\":%u,\"cache_size\":%u}\n",
++            status,
++            summary.command_count,
++            summary.valid_command_count,
++            summary.kv_load_count,
++            summary.kv_prefetch_count,
++            summary.kv_compute_count,
++            summary.kv_evict_count,
++            summary.ssd_read_command_count,
++            summary.ssd_write_command_count,
++            (unsigned long long) summary.ssd_read_bytes,
++            (unsigned long long) summary.ssd_write_bytes,
++            summary.invalid_command_count,
++            summary.missing_field_count,
++            summary.unknown_op_count,
++            summary.unknown_layer_count,
++            summary.out_of_range_block_count,
++            summary.invalid_token_range_count,
++            summary.invalid_size_count,
++            summary.invalid_location_count,
++            summary.command_file_open_error,
++            summary.layer_count,
++            summary.cache_size);
++
++    std::fclose(fp);
++}
++
++static bool llama_solidattention_kv_command_matches_runtime(
++        const llama_solidattention_kv_command_record & command,
++        int64_t layer_id,
++        uint32_t block_id,
++        int64_t start_token,
++        int64_t end_token) {
++    return command.layer_id == layer_id &&
++        command.block_id == (int64_t) block_id &&
++        command.start_token < end_token &&
++        command.end_token > start_token;
++}
++
++static const char * llama_solidattention_movement_intent_kind(const llama_solidattention_kv_command_record & command) {
++    if ((std::strcmp(command.op, "kv_load") == 0 || std::strcmp(command.op, "kv_prefetch") == 0) &&
++            std::strcmp(command.source, "ssd") == 0 && std::strcmp(command.target, "dram") == 0) {
++        return "ssd_read";
++    }
++
++    if ((std::strcmp(command.op, "kv_load") == 0 || std::strcmp(command.op, "kv_prefetch") == 0) &&
++            std::strcmp(command.source, "dram") == 0 && std::strcmp(command.target, "vram") == 0) {
++        return "dram_to_vram";
++    }
++
++    if (std::strcmp(command.op, "kv_compute") == 0) {
++        return "compute";
++    }
++
++    if (std::strcmp(command.op, "kv_evict") == 0 && std::strcmp(command.target, "ssd") == 0) {
++        return "ssd_write";
++    }
++
++    return "metadata";
++}
++
++static void llama_solidattention_record_movement_intent(
++        const llama_solidattention_kv_command_record & command,
++        const char * intent_kind) {
++    ++llama_solidattention_kv_bridge_summary.movement_intent_count;
++    if (command.blocking) {
++        ++llama_solidattention_kv_bridge_summary.blocking_movement_intent_count;
++    } else {
++        ++llama_solidattention_kv_bridge_summary.nonblocking_movement_intent_count;
++    }
++
++    if (std::strcmp(intent_kind, "ssd_read") == 0) {
++        ++llama_solidattention_kv_bridge_summary.ssd_read_intent_count;
++        llama_solidattention_kv_bridge_summary.ssd_read_intent_bytes += (uint64_t) command.size_bytes;
++    } else if (std::strcmp(intent_kind, "dram_to_vram") == 0) {
++        ++llama_solidattention_kv_bridge_summary.dram_to_vram_intent_count;
++        llama_solidattention_kv_bridge_summary.dram_to_vram_intent_bytes += (uint64_t) command.size_bytes;
++    } else if (std::strcmp(intent_kind, "compute") == 0) {
++        ++llama_solidattention_kv_bridge_summary.compute_intent_count;
++        llama_solidattention_kv_bridge_summary.compute_intent_bytes += (uint64_t) command.size_bytes;
++    } else if (std::strcmp(intent_kind, "ssd_write") == 0) {
++        ++llama_solidattention_kv_bridge_summary.ssd_write_intent_count;
++        llama_solidattention_kv_bridge_summary.ssd_write_intent_bytes += (uint64_t) command.size_bytes;
++    }
++}
++
++static bool llama_solidattention_kv_executor_seed_missing_sources() {
++    const char * value = std::getenv("LLAMA_SOLIDATTENTION_KV_EXECUTOR_SEED_MISSING_SOURCES");
++    if (!value || value[0] == '\0') {
++        return true;
++    }
++    return std::strcmp(value, "0") != 0 &&
++        std::strcmp(value, "false") != 0 &&
++        std::strcmp(value, "False") != 0 &&
++        std::strcmp(value, "FALSE") != 0;
++}
++
++static bool llama_solidattention_staging_key_matches(
++        const llama_solidattention_kv_staging_record & record,
++        const llama_solidattention_kv_command_record & command) {
++    return record.layer_id == command.layer_id &&
++        record.block_id == command.block_id &&
++        record.start_token == command.start_token &&
++        record.end_token == command.end_token;
++}
++
++static llama_solidattention_kv_staging_record * llama_solidattention_find_staging_record(
++        const llama_solidattention_kv_command_record & command) {
++    for (uint32_t i = 0; i < llama_solidattention_kv_staging_record_count; ++i) {
++        auto & record = llama_solidattention_kv_staging_records[i];
++        if (llama_solidattention_staging_key_matches(record, command)) {
++            return &record;
++        }
++    }
++    return nullptr;
++}
++
++static llama_solidattention_kv_staging_record * llama_solidattention_find_or_create_staging_record(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_find_staging_record(command);
++    if (record) {
++        if (record->size_bytes != command.size_bytes) {
++            ++llama_solidattention_kv_bridge_summary.executor_size_mismatch_count;
++            return nullptr;
++        }
++        return record;
++    }
++
++    if (llama_solidattention_kv_staging_record_count >= LLAMA_SOLIDATTENTION_MAX_KV_STAGING_BLOCKS) {
++        ++llama_solidattention_kv_bridge_summary.executor_staging_overflow_count;
++        return nullptr;
++    }
++
++    record = &llama_solidattention_kv_staging_records[llama_solidattention_kv_staging_record_count++];
++    *record = llama_solidattention_kv_staging_record();
++    record->layer_id = command.layer_id;
++    record->block_id = command.block_id;
++    record->start_token = command.start_token;
++    record->end_token = command.end_token;
++    record->size_bytes = command.size_bytes;
++    return record;
++}
++
++static void llama_solidattention_executor_verify_byte_ranges(
++        llama_solidattention_kv_staging_record & record) {
++    if (record.byte_range_checked) {
++        return;
++    }
++    record.byte_range_checked = true;
++
++    const int64_t token_count = record.end_token - record.start_token;
++    if (token_count <= 0 || record.size_bytes <= 0 || record.size_bytes % token_count != 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_byte_range_size_mismatch_count;
++        return;
++    }
++
++    const int64_t per_token_bytes = record.size_bytes / token_count;
++    if (per_token_bytes <= 0 || per_token_bytes % 2 != 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_byte_range_size_mismatch_count;
++        return;
++    }
++
++    record.key_row_size_bytes = (uint64_t) per_token_bytes / 2;
++    record.value_row_size_bytes = (uint64_t) per_token_bytes / 2;
++    ++llama_solidattention_kv_bridge_summary.executor_byte_range_block_count;
++    llama_solidattention_kv_bridge_summary.executor_byte_range_count += (uint32_t) token_count * 2;
++    llama_solidattention_kv_bridge_summary.executor_byte_range_mapped_bytes += (uint64_t) record.size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_byte_range_key_bytes += (uint64_t) token_count * record.key_row_size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_byte_range_value_bytes += (uint64_t) token_count * record.value_row_size_bytes;
++    ++llama_solidattention_kv_bridge_summary.executor_byte_range_inferred_row_size_count;
++
++    const uint32_t cache_size = llama_solidattention_kv_bridge_summary.cache_size;
++    if (cache_size > 0 && record.end_token > (int64_t) cache_size) {
++        const int64_t first_oob_token = std::max<int64_t>(record.start_token, (int64_t) cache_size);
++        const int64_t oob_tokens = record.end_token - first_oob_token;
++        if (oob_tokens > 0) {
++            llama_solidattention_kv_bridge_summary.executor_byte_range_tensor_bounds_error_count += (uint32_t) oob_tokens * 2;
++        }
++    }
++}
++
++static uint64_t llama_solidattention_fnv1a_update(
++        uint64_t hash,
++        const void * data,
++        size_t size) {
++    const unsigned char * bytes = static_cast<const unsigned char *>(data);
++    for (size_t i = 0; i < size; ++i) {
++        hash ^= (uint64_t) bytes[i];
++        hash *= 1099511628211ull;
++    }
++    return hash;
++}
++
++static uint64_t llama_solidattention_staging_checksum(
++        const llama_solidattention_kv_staging_record & record,
++        bool value_rows_only) {
++    const uint64_t fnv_offset = 1469598103934665603ull;
++    uint64_t hash = fnv_offset;
++    if (!record.vram_buffer || record.key_row_size_bytes == 0 || record.value_row_size_bytes == 0) {
++        return hash;
++    }
++
++    const int64_t token_count = record.end_token - record.start_token;
++    if (token_count <= 0) {
++        return hash;
++    }
++
++    const unsigned char * bytes = static_cast<const unsigned char *>(record.vram_buffer);
++    const uint64_t stride = record.key_row_size_bytes + record.value_row_size_bytes;
++    const uint64_t row_size = value_rows_only ? record.value_row_size_bytes : record.key_row_size_bytes;
++    const uint64_t row_offset = value_rows_only ? record.key_row_size_bytes : 0;
++    for (int64_t token_index = 0; token_index < token_count; ++token_index) {
++        const uint64_t staging_offset = (uint64_t) token_index * stride + row_offset;
++        hash = llama_solidattention_fnv1a_update(hash, bytes + staging_offset, (size_t) row_size);
++    }
++    return hash;
++}
++
++static void llama_solidattention_write_tensor_dry_run_event(
++        const llama_solidattention_kv_staging_record & record,
++        uint64_t block_checksum,
++        uint64_t key_checksum,
++        uint64_t value_checksum,
++        uint32_t tensor_bounds_error_count) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_TENSOR_DRY_RUN_TRACE_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "a");
++    if (!fp) {
++        return;
++    }
++
++    const int64_t token_count = record.end_token - record.start_token;
++    const uint64_t stride = record.key_row_size_bytes + record.value_row_size_bytes;
++    const uint64_t range_count = (uint64_t) token_count * 2;
++    const uint64_t cell_start = (uint64_t) record.block_id;
++    const uint64_t cell_end = cell_start + (uint64_t) std::max<int64_t>(0, token_count);
++    const uint64_t key_tensor_start_offset = cell_start * record.key_row_size_bytes;
++    const uint64_t key_tensor_end_offset = cell_end * record.key_row_size_bytes;
++    const uint64_t value_tensor_start_offset = cell_start * record.value_row_size_bytes;
++    const uint64_t value_tensor_end_offset = cell_end * record.value_row_size_bytes;
++    const uint64_t last_key_staging_offset = token_count > 0 ? (uint64_t) (token_count - 1) * stride : 0;
++    const uint64_t last_value_staging_offset = last_key_staging_offset + record.key_row_size_bytes;
++
++    std::fprintf(fp,
++            "{\"op\":\"kv_tensor_copy_dry_run\",\"layer_id\":%lld,\"block_id\":%lld,"
++            "\"start_token\":%lld,\"end_token\":%lld,\"size_bytes\":%lld,"
++            "\"metadata\":{\"source\":\"llama.cpp\","
++            "\"event\":\"solidattention_kv_tensor_copy_dry_run\","
++            "\"source_buffer\":\"vram_staging\",\"target\":\"llama.cpp_kv_tensors\","
++            "\"interleaved_layout\":\"k_then_v_per_token\","
++            "\"cell_start\":%llu,\"cell_end\":%llu,"
++            "\"range_count\":%llu,\"staging_stride_bytes\":%llu,"
++            "\"key_row_size_bytes\":%llu,\"value_row_size_bytes\":%llu,"
++            "\"key_tensor_start_offset\":%llu,\"key_tensor_end_offset\":%llu,"
++            "\"value_tensor_start_offset\":%llu,\"value_tensor_end_offset\":%llu,"
++            "\"first_key_staging_offset\":0,\"first_value_staging_offset\":%llu,"
++            "\"last_key_staging_offset\":%llu,\"last_value_staging_offset\":%llu,"
++            "\"block_checksum_fnv1a64\":\"%016llx\","
++            "\"key_checksum_fnv1a64\":\"%016llx\","
++            "\"value_checksum_fnv1a64\":\"%016llx\","
++            "\"cache_size\":%u,\"tensor_bounds_error_count\":%u}}\n",
++            (long long) record.layer_id,
++            (long long) record.block_id,
++            (long long) record.start_token,
++            (long long) record.end_token,
++            (long long) record.size_bytes,
++            (unsigned long long) cell_start,
++            (unsigned long long) cell_end,
++            (unsigned long long) range_count,
++            (unsigned long long) stride,
++            (unsigned long long) record.key_row_size_bytes,
++            (unsigned long long) record.value_row_size_bytes,
++            (unsigned long long) key_tensor_start_offset,
++            (unsigned long long) key_tensor_end_offset,
++            (unsigned long long) value_tensor_start_offset,
++            (unsigned long long) value_tensor_end_offset,
++            (unsigned long long) record.key_row_size_bytes,
++            (unsigned long long) last_key_staging_offset,
++            (unsigned long long) last_value_staging_offset,
++            (unsigned long long) block_checksum,
++            (unsigned long long) key_checksum,
++            (unsigned long long) value_checksum,
++            llama_solidattention_kv_bridge_summary.cache_size,
++            tensor_bounds_error_count);
++
++    std::fclose(fp);
++}
++
++static void llama_solidattention_executor_tensor_copy_dry_run(
++        llama_solidattention_kv_staging_record & record) {
++    if (!llama_solidattention_kv_tensor_dry_run_enabled()) {
++        return;
++    }
++
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_enabled = 1;
++    if (record.tensor_dry_run_checked) {
++        return;
++    }
++    record.tensor_dry_run_checked = true;
++
++    if (!record.vram_buffer) {
++        return;
++    }
++
++    llama_solidattention_executor_verify_byte_ranges(record);
++    const int64_t token_count = record.end_token - record.start_token;
++    if (token_count <= 0 || record.size_bytes <= 0 || record.key_row_size_bytes == 0 || record.value_row_size_bytes == 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_size_mismatch_count;
++        return;
++    }
++
++    const uint64_t expected_size = (uint64_t) token_count * (record.key_row_size_bytes + record.value_row_size_bytes);
++    if (expected_size != (uint64_t) record.size_bytes) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_size_mismatch_count;
++        return;
++    }
++
++    uint32_t tensor_bounds_error_count = 0;
++    const uint32_t cache_size = llama_solidattention_kv_bridge_summary.cache_size;
++    if (cache_size > 0 && record.end_token > (int64_t) cache_size) {
++        const int64_t first_oob_token = std::max<int64_t>(record.start_token, (int64_t) cache_size);
++        const int64_t oob_tokens = record.end_token - first_oob_token;
++        if (oob_tokens > 0) {
++            tensor_bounds_error_count = (uint32_t) oob_tokens * 2;
++        }
++    }
++
++    const uint64_t block_checksum = llama_solidattention_fnv1a_update(
++            1469598103934665603ull,
++            record.vram_buffer,
++            (size_t) record.size_bytes);
++    const uint64_t key_checksum = llama_solidattention_staging_checksum(record, false);
++    const uint64_t value_checksum = llama_solidattention_staging_checksum(record, true);
++    const uint64_t range_count = (uint64_t) token_count * 2;
++    const uint64_t key_bytes = (uint64_t) token_count * record.key_row_size_bytes;
++    const uint64_t value_bytes = (uint64_t) token_count * record.value_row_size_bytes;
++
++    ++llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_block_count;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_range_count += (uint32_t) range_count;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_bytes += (uint64_t) record.size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_key_bytes += key_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_value_bytes += value_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_checksum_count += 3;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_checksum_xor ^= block_checksum ^ key_checksum ^ value_checksum;
++    llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_tensor_bounds_error_count += tensor_bounds_error_count;
++
++    llama_solidattention_write_tensor_dry_run_event(
++            record,
++            block_checksum,
++            key_checksum,
++            value_checksum,
++            tensor_bounds_error_count);
++}
++
++static uint64_t llama_solidattention_tensor_row_checksum(
++        const ggml_tensor * tensor,
++        size_t offset,
++        size_t size) {
++    std::vector<unsigned char> row(size);
++    ggml_backend_tensor_get(tensor, row.data(), offset, size);
++    return llama_solidattention_fnv1a_update(1469598103934665603ull, row.data(), row.size());
++}
++
++static void llama_solidattention_write_tensor_mutation_event(
++        const llama_solidattention_kv_staging_record & record,
++        const char * status,
++        uint64_t staging_key_checksum,
++        uint64_t staging_value_checksum,
++        uint64_t post_key_checksum,
++        uint64_t post_value_checksum,
++        uint32_t tensor_bounds_error_count) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_TENSOR_MUTATION_TRACE_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "a");
++    if (!fp) {
++        return;
++    }
++
++    const int64_t token_count = record.end_token - record.start_token;
++    const uint64_t cell_start = (uint64_t) record.block_id;
++    const uint64_t cell_end = cell_start + (uint64_t) std::max<int64_t>(0, token_count);
++    const uint64_t key_tensor_start_offset = cell_start * record.key_row_size_bytes;
++    const uint64_t key_tensor_end_offset = cell_end * record.key_row_size_bytes;
++    const uint64_t value_tensor_start_offset = cell_start * record.value_row_size_bytes;
++    const uint64_t value_tensor_end_offset = cell_end * record.value_row_size_bytes;
++
++    std::fprintf(fp,
++            "{\"op\":\"kv_tensor_mutation\",\"layer_id\":%lld,\"block_id\":%lld,"
++            "\"start_token\":%lld,\"end_token\":%lld,\"size_bytes\":%lld,"
++            "\"metadata\":{\"source\":\"llama.cpp\","
++            "\"event\":\"solidattention_kv_tensor_mutation\","
++            "\"status\":\"%s\",\"source_buffer\":\"vram_staging\","
++            "\"target\":\"llama.cpp_kv_tensors\",\"cell_start\":%llu,\"cell_end\":%llu,"
++            "\"range_count\":%llu,\"key_row_size_bytes\":%llu,\"value_row_size_bytes\":%llu,"
++            "\"key_tensor_start_offset\":%llu,\"key_tensor_end_offset\":%llu,"
++            "\"value_tensor_start_offset\":%llu,\"value_tensor_end_offset\":%llu,"
++            "\"staging_key_checksum_fnv1a64\":\"%016llx\","
++            "\"staging_value_checksum_fnv1a64\":\"%016llx\","
++            "\"post_key_checksum_fnv1a64\":\"%016llx\","
++            "\"post_value_checksum_fnv1a64\":\"%016llx\","
++            "\"cache_size\":%u,\"tensor_bounds_error_count\":%u}}\n",
++            (long long) record.layer_id,
++            (long long) record.block_id,
++            (long long) record.start_token,
++            (long long) record.end_token,
++            (long long) record.size_bytes,
++            status ? status : "unknown",
++            (unsigned long long) cell_start,
++            (unsigned long long) cell_end,
++            (unsigned long long) ((uint64_t) std::max<int64_t>(0, token_count) * 2),
++            (unsigned long long) record.key_row_size_bytes,
++            (unsigned long long) record.value_row_size_bytes,
++            (unsigned long long) key_tensor_start_offset,
++            (unsigned long long) key_tensor_end_offset,
++            (unsigned long long) value_tensor_start_offset,
++            (unsigned long long) value_tensor_end_offset,
++            (unsigned long long) staging_key_checksum,
++            (unsigned long long) staging_value_checksum,
++            (unsigned long long) post_key_checksum,
++            (unsigned long long) post_value_checksum,
++            llama_solidattention_kv_bridge_summary.cache_size,
++            tensor_bounds_error_count);
++
++    std::fclose(fp);
++}
++
++static void llama_solidattention_executor_tensor_mutation_gate(
++        llama_solidattention_kv_staging_record & record,
++        ggml_tensor * k_tensor,
++        ggml_tensor * v_tensor,
++        bool v_trans) {
++    if (!llama_solidattention_kv_tensor_mutation_enabled()) {
++        return;
++    }
++
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_enabled = 1;
++    if (!record.vram_buffer) {
++        return;
++    }
++    if (record.tensor_mutation_checked) {
++        return;
++    }
++    record.tensor_mutation_checked = true;
++    ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_attempt_count;
++
++    if (!k_tensor || !v_tensor || k_tensor->ne[2] != 1 || v_tensor->ne[2] != 1) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_unsupported_count;
++        llama_solidattention_write_tensor_mutation_event(record, "unsupported", 0, 0, 0, 0, 0);
++        return;
++    }
++
++    llama_solidattention_executor_verify_byte_ranges(record);
++    const int64_t token_count = record.end_token - record.start_token;
++    if (token_count <= 0 || record.size_bytes <= 0 || record.key_row_size_bytes == 0 || record.value_row_size_bytes == 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_size_mismatch_count;
++        llama_solidattention_write_tensor_mutation_event(record, "size_mismatch", 0, 0, 0, 0, 0);
++        return;
++    }
++
++    const uint64_t expected_size = (uint64_t) token_count * (record.key_row_size_bytes + record.value_row_size_bytes);
++    const uint64_t cell_start = (uint64_t) record.block_id;
++    const uint64_t cell_end = cell_start + (uint64_t) token_count;
++    const uint32_t cache_size = llama_solidattention_kv_bridge_summary.cache_size;
++    if (expected_size != (uint64_t) record.size_bytes) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_size_mismatch_count;
++        llama_solidattention_write_tensor_mutation_event(record, "size_mismatch", 0, 0, 0, 0, 0);
++        return;
++    }
++    if (cache_size > 0 && cell_end > (uint64_t) cache_size) {
++        const uint64_t first_oob_cell = std::max<uint64_t>(cell_start, (uint64_t) cache_size);
++        const uint64_t oob_cells = cell_end - first_oob_cell;
++        const uint32_t errors = (uint32_t) oob_cells * 2;
++        llama_solidattention_kv_bridge_summary.executor_tensor_mutation_tensor_bounds_error_count += errors;
++        llama_solidattention_write_tensor_mutation_event(record, "tensor_bounds_error", 0, 0, 0, 0, errors);
++        return;
++    }
++
++    const size_t k_row_size = ggml_row_size(k_tensor->type, k_tensor->ne[0]);
++    if (k_row_size != (size_t) record.key_row_size_bytes) {
++        ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_size_mismatch_count;
++        llama_solidattention_write_tensor_mutation_event(record, "size_mismatch", 0, 0, 0, 0, 0);
++        return;
++    }
++
++    bool v_trans_supported = true;
++    size_t v_row_size = 0;
++    size_t v_el_size = 0;
++    if (!v_trans) {
++        v_row_size = ggml_row_size(v_tensor->type, v_tensor->ne[0]);
++        if (v_row_size != (size_t) record.value_row_size_bytes) {
++            ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_size_mismatch_count;
++            llama_solidattention_write_tensor_mutation_event(record, "size_mismatch", 0, 0, 0, 0, 0);
++            return;
++        }
++    } else {
++        v_el_size = ggml_type_size(v_tensor->type);
++        v_row_size = (size_t) v_tensor->ne[0] * v_el_size;
++        v_trans_supported = ggml_blck_size(v_tensor->type) == 1 && v_row_size == (size_t) record.value_row_size_bytes;
++        if (!v_trans_supported) {
++            ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_unsupported_count;
++            llama_solidattention_write_tensor_mutation_event(record, "unsupported", 0, 0, 0, 0, 0);
++            return;
++        }
++    }
++
++    const unsigned char * bytes = static_cast<const unsigned char *>(record.vram_buffer);
++    const uint64_t stride = record.key_row_size_bytes + record.value_row_size_bytes;
++    const uint64_t staging_key_checksum = llama_solidattention_staging_checksum(record, false);
++    const uint64_t staging_value_checksum = llama_solidattention_staging_checksum(record, true);
++    uint64_t post_key_checksum = 1469598103934665603ull;
++    uint64_t post_value_checksum = 1469598103934665603ull;
++
++    for (int64_t token_index = 0; token_index < token_count; ++token_index) {
++        const uint64_t cell = cell_start + (uint64_t) token_index;
++        const uint64_t key_staging_offset = (uint64_t) token_index * stride;
++        const uint64_t value_staging_offset = key_staging_offset + record.key_row_size_bytes;
++        const size_t key_tensor_offset = (size_t) cell * k_row_size;
++        ggml_backend_tensor_set(k_tensor, bytes + key_staging_offset, key_tensor_offset, k_row_size);
++        std::vector<unsigned char> key_row(k_row_size);
++        ggml_backend_tensor_get(k_tensor, key_row.data(), key_tensor_offset, key_row.size());
++        post_key_checksum = llama_solidattention_fnv1a_update(post_key_checksum, key_row.data(), key_row.size());
++
++        if (!v_trans) {
++            const size_t value_tensor_offset = (size_t) cell * v_row_size;
++            ggml_backend_tensor_set(v_tensor, bytes + value_staging_offset, value_tensor_offset, v_row_size);
++            std::vector<unsigned char> value_row(v_row_size);
++            ggml_backend_tensor_get(v_tensor, value_row.data(), value_tensor_offset, value_row.size());
++            post_value_checksum = llama_solidattention_fnv1a_update(post_value_checksum, value_row.data(), value_row.size());
++        } else {
++            for (int64_t j = 0; j < v_tensor->ne[0]; ++j) {
++                const size_t src_offset = (size_t) value_staging_offset + (size_t) j * v_el_size;
++                const size_t dst_offset = ((size_t) cell + (size_t) j * (size_t) cache_size) * v_el_size;
++                ggml_backend_tensor_set(v_tensor, bytes + src_offset, dst_offset, v_el_size);
++                std::vector<unsigned char> value_el(v_el_size);
++                ggml_backend_tensor_get(v_tensor, value_el.data(), dst_offset, value_el.size());
++                post_value_checksum = llama_solidattention_fnv1a_update(post_value_checksum, value_el.data(), value_el.size());
++            }
++        }
++    }
++
++    ++llama_solidattention_kv_bridge_summary.executor_tensor_mutation_block_count;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_range_count += (uint32_t) token_count * 2;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_bytes += (uint64_t) record.size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_key_bytes += (uint64_t) token_count * record.key_row_size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_value_bytes += (uint64_t) token_count * record.value_row_size_bytes;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_checksum_count += 4;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_staging_checksum_xor ^= staging_key_checksum ^ staging_value_checksum;
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_post_checksum_xor ^= post_key_checksum ^ post_value_checksum;
++
++    uint32_t verify_errors = 0;
++    if (staging_key_checksum != post_key_checksum) {
++        ++verify_errors;
++    }
++    if (staging_value_checksum != post_value_checksum) {
++        ++verify_errors;
++    }
++    llama_solidattention_kv_bridge_summary.executor_tensor_mutation_verify_error_count += verify_errors;
++
++    llama_solidattention_write_tensor_mutation_event(
++            record,
++            verify_errors == 0 ? "ok" : "verify_error",
++            staging_key_checksum,
++            staging_value_checksum,
++            post_key_checksum,
++            post_value_checksum,
++            0);
++}
++
++static void llama_solidattention_refresh_executor_staging_counts() {
++    llama_solidattention_kv_bridge_summary.executor_staging_record_count = llama_solidattention_kv_staging_record_count;
++    llama_solidattention_kv_bridge_summary.executor_dram_buffer_count = 0;
++    llama_solidattention_kv_bridge_summary.executor_dram_buffer_bytes = 0;
++    llama_solidattention_kv_bridge_summary.executor_vram_buffer_count = 0;
++    llama_solidattention_kv_bridge_summary.executor_vram_buffer_bytes = 0;
++
++    for (uint32_t i = 0; i < llama_solidattention_kv_staging_record_count; ++i) {
++        const auto & record = llama_solidattention_kv_staging_records[i];
++        if (record.dram_buffer) {
++            ++llama_solidattention_kv_bridge_summary.executor_dram_buffer_count;
++            llama_solidattention_kv_bridge_summary.executor_dram_buffer_bytes += (uint64_t) record.size_bytes;
++        }
++        if (record.vram_buffer) {
++            ++llama_solidattention_kv_bridge_summary.executor_vram_buffer_count;
++            llama_solidattention_kv_bridge_summary.executor_vram_buffer_bytes += (uint64_t) record.size_bytes;
++        }
++    }
++}
++
++static void llama_solidattention_free_executor_staging_records() {
++    for (uint32_t i = 0; i < llama_solidattention_kv_staging_record_count; ++i) {
++        auto & record = llama_solidattention_kv_staging_records[i];
++        if (record.dram_buffer) {
++            std::free(record.dram_buffer);
++        }
++        if (record.vram_buffer) {
++            std::free(record.vram_buffer);
++        }
++        record = llama_solidattention_kv_staging_record();
++    }
++    llama_solidattention_kv_staging_record_count = 0;
++    llama_solidattention_refresh_executor_staging_counts();
++}
++
++static bool llama_solidattention_executor_read_stdio(
++        const char * backing_path,
++        const llama_solidattention_kv_command_record & command,
++        void * buffer,
++        size_t size) {
++    FILE * fp = std::fopen(backing_path, "rb");
++    if (!fp) {
++        ++llama_solidattention_kv_bridge_summary.executor_open_error_count;
++        return false;
++    }
++
++    if (command.ssd_offset > (int64_t) std::numeric_limits<long>::max()) {
++        ++llama_solidattention_kv_bridge_summary.executor_seek_error_count;
++        std::fclose(fp);
++        return false;
++    }
++
++    if (std::fseek(fp, (long) command.ssd_offset, SEEK_SET) != 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_seek_error_count;
++        std::fclose(fp);
++        return false;
++    }
++
++    const size_t n_read = std::fread(buffer, 1, size, fp);
++    std::fclose(fp);
++    if (n_read != size) {
++        ++llama_solidattention_kv_bridge_summary.executor_short_read_count;
++        return false;
++    }
++    return true;
++}
++
++#if defined(LLAMA_SOLIDATTENTION_HAVE_LIBURING)
++static bool llama_solidattention_executor_read_liburing(
++        const char * backing_path,
++        const llama_solidattention_kv_command_record & command,
++        void * buffer,
++        size_t size) {
++    int fd = open(backing_path, O_RDONLY);
++    if (fd < 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_open_error_count;
++        return false;
++    }
++
++    struct io_uring ring;
++    if (io_uring_queue_init(8, &ring, 0) != 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_backend_error_count;
++        close(fd);
++        return false;
++    }
++
++    struct io_uring_sqe * sqe = io_uring_get_sqe(&ring);
++    if (!sqe) {
++        ++llama_solidattention_kv_bridge_summary.executor_backend_error_count;
++        io_uring_queue_exit(&ring);
++        close(fd);
++        return false;
++    }
++
++    io_uring_prep_read(sqe, fd, buffer, size, (off_t) command.ssd_offset);
++    if (io_uring_submit(&ring) < 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_backend_error_count;
++        io_uring_queue_exit(&ring);
++        close(fd);
++        return false;
++    }
++
++    struct io_uring_cqe * cqe = nullptr;
++    const int wait_rc = io_uring_wait_cqe(&ring, &cqe);
++    bool ok = false;
++    if (wait_rc == 0 && cqe) {
++        ok = cqe->res == (int) size;
++        if (!ok) {
++            ++llama_solidattention_kv_bridge_summary.executor_short_read_count;
++        }
++        io_uring_cqe_seen(&ring, cqe);
++    } else {
++        ++llama_solidattention_kv_bridge_summary.executor_backend_error_count;
++    }
++
++    io_uring_queue_exit(&ring);
++    close(fd);
++    return ok;
++}
++#endif
++
++static void * llama_solidattention_executor_alloc_and_read_backing(
++        const llama_solidattention_kv_command_record & command,
++        bool count_as_ssd_read) {
++    const char * backing_path = std::getenv("LLAMA_SOLIDATTENTION_KV_EXECUTOR_BACKING_PATH");
++    if (command.size_bytes <= 0 || command.ssd_offset < 0) {
++        ++llama_solidattention_kv_bridge_summary.executor_seek_error_count;
++        if (count_as_ssd_read) {
++            ++llama_solidattention_kv_bridge_summary.executor_ssd_read_error_count;
++        }
++        return nullptr;
++    }
++
++    const size_t size = (size_t) command.size_bytes;
++    void * buffer = std::malloc(size);
++    if (!buffer) {
++        ++llama_solidattention_kv_bridge_summary.executor_alloc_error_count;
++        if (count_as_ssd_read) {
++            ++llama_solidattention_kv_bridge_summary.executor_ssd_read_error_count;
++        }
++        return nullptr;
++    }
++
++    const char * backend = llama_solidattention_kv_executor_backend_name();
++    bool ok = false;
++#if defined(LLAMA_SOLIDATTENTION_HAVE_LIBURING)
++    if (std::strcmp(backend, "liburing_backing_file_stub") == 0) {
++        ok = llama_solidattention_executor_read_liburing(backing_path, command, buffer, size);
++    } else
++#endif
++    {
++        ok = llama_solidattention_executor_read_stdio(backing_path, command, buffer, size);
++    }
++
++    if (!ok) {
++        std::free(buffer);
++        if (count_as_ssd_read) {
++            ++llama_solidattention_kv_bridge_summary.executor_ssd_read_error_count;
++        }
++        return nullptr;
++    }
++    return buffer;
++}
++
++static bool llama_solidattention_executor_assign_dram_buffer(
++        const llama_solidattention_kv_command_record & command,
++        void * buffer) {
++    auto * record = llama_solidattention_find_or_create_staging_record(command);
++    if (!record) {
++        std::free(buffer);
++        return false;
++    }
++    if (record->dram_buffer) {
++        std::free(record->dram_buffer);
++    }
++    record->dram_buffer = buffer;
++    llama_solidattention_executor_verify_byte_ranges(*record);
++    llama_solidattention_refresh_executor_staging_counts();
++    return true;
++}
++
++static bool llama_solidattention_executor_assign_vram_buffer(
++        const llama_solidattention_kv_command_record & command,
++        void * buffer) {
++    auto * record = llama_solidattention_find_or_create_staging_record(command);
++    if (!record) {
++        std::free(buffer);
++        return false;
++    }
++    if (record->vram_buffer) {
++        std::free(record->vram_buffer);
++    }
++    record->vram_buffer = buffer;
++    llama_solidattention_executor_verify_byte_ranges(*record);
++    llama_solidattention_executor_tensor_copy_dry_run(*record);
++    llama_solidattention_refresh_executor_staging_counts();
++    return true;
++}
++
++static llama_solidattention_kv_staging_record * llama_solidattention_executor_ensure_dram_source(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_find_staging_record(command);
++    if (record && record->dram_buffer) {
++        return record;
++    }
++    if (!llama_solidattention_kv_executor_seed_missing_sources()) {
++        ++llama_solidattention_kv_bridge_summary.executor_missing_source_count;
++        return nullptr;
++    }
++    void * buffer = llama_solidattention_executor_alloc_and_read_backing(command, false);
++    if (!buffer || !llama_solidattention_executor_assign_dram_buffer(command, buffer)) {
++        ++llama_solidattention_kv_bridge_summary.executor_missing_source_count;
++        return nullptr;
++    }
++    ++llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_count;
++    llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_bytes += (uint64_t) command.size_bytes;
++    return llama_solidattention_find_staging_record(command);
++}
++
++static llama_solidattention_kv_staging_record * llama_solidattention_executor_ensure_vram_source(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_find_staging_record(command);
++    if (record && record->vram_buffer) {
++        return record;
++    }
++    if (!llama_solidattention_kv_executor_seed_missing_sources()) {
++        ++llama_solidattention_kv_bridge_summary.executor_missing_source_count;
++        return nullptr;
++    }
++    void * buffer = llama_solidattention_executor_alloc_and_read_backing(command, false);
++    if (!buffer || !llama_solidattention_executor_assign_vram_buffer(command, buffer)) {
++        ++llama_solidattention_kv_bridge_summary.executor_missing_source_count;
++        return nullptr;
++    }
++    ++llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_count;
++    llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_bytes += (uint64_t) command.size_bytes;
++    return llama_solidattention_find_staging_record(command);
++}
++
++static void llama_solidattention_execute_ssd_read_intent(
++        const llama_solidattention_kv_command_record & command) {
++    ++llama_solidattention_kv_bridge_summary.executor_ssd_read_attempt_count;
++    void * buffer = llama_solidattention_executor_alloc_and_read_backing(command, true);
++    if (!buffer) {
++        return;
++    }
++    if (llama_solidattention_executor_assign_dram_buffer(command, buffer)) {
++        ++llama_solidattention_kv_bridge_summary.executor_ssd_read_success_count;
++        llama_solidattention_kv_bridge_summary.executor_ssd_read_bytes += (uint64_t) command.size_bytes;
++    } else {
++        ++llama_solidattention_kv_bridge_summary.executor_ssd_read_error_count;
++    }
++}
++
++static void llama_solidattention_execute_dram_to_vram_intent(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_executor_ensure_dram_source(command);
++    if (!record || !record->dram_buffer) {
++        return;
++    }
++    if (record->size_bytes != command.size_bytes) {
++        ++llama_solidattention_kv_bridge_summary.executor_size_mismatch_count;
++        return;
++    }
++    void * buffer = std::malloc((size_t) command.size_bytes);
++    if (!buffer) {
++        ++llama_solidattention_kv_bridge_summary.executor_alloc_error_count;
++        return;
++    }
++    std::memcpy(buffer, record->dram_buffer, (size_t) command.size_bytes);
++    if (llama_solidattention_executor_assign_vram_buffer(command, buffer)) {
++        ++llama_solidattention_kv_bridge_summary.executor_dram_to_vram_copy_count;
++        llama_solidattention_kv_bridge_summary.executor_dram_to_vram_copy_bytes += (uint64_t) command.size_bytes;
++    }
++}
++
++static void llama_solidattention_execute_compute_intent(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_executor_ensure_vram_source(command);
++    if (!record || !record->vram_buffer) {
++        return;
++    }
++    if (record->size_bytes != command.size_bytes) {
++        ++llama_solidattention_kv_bridge_summary.executor_size_mismatch_count;
++        return;
++    }
++    ++llama_solidattention_kv_bridge_summary.executor_compute_resident_count;
++    llama_solidattention_kv_bridge_summary.executor_compute_resident_bytes += (uint64_t) command.size_bytes;
++}
++
++static void llama_solidattention_execute_evict_intent(
++        const llama_solidattention_kv_command_record & command) {
++    auto * record = llama_solidattention_find_staging_record(command);
++    if (!record || (!record->vram_buffer && !record->dram_buffer)) {
++        ++llama_solidattention_kv_bridge_summary.executor_missing_source_count;
++        return;
++    }
++    if (record->vram_buffer) {
++        std::free(record->vram_buffer);
++        record->vram_buffer = nullptr;
++    } else if (record->dram_buffer) {
++        std::free(record->dram_buffer);
++        record->dram_buffer = nullptr;
++    }
++    ++llama_solidattention_kv_bridge_summary.executor_evict_count;
++    llama_solidattention_kv_bridge_summary.executor_evict_bytes += (uint64_t) command.size_bytes;
++    llama_solidattention_refresh_executor_staging_counts();
++}
++
++static void llama_solidattention_execute_movement_intent_stub(
++        const llama_solidattention_kv_command_record & command,
++        const char * intent_kind) {
++    if (!llama_solidattention_kv_executor_enabled()) {
++        return;
++    }
++
++    llama_solidattention_kv_bridge_summary.executor_enabled = 1;
++    if (!intent_kind) {
++        ++llama_solidattention_kv_bridge_summary.executor_metadata_only_count;
++    } else if (std::strcmp(intent_kind, "ssd_read") == 0) {
++        llama_solidattention_execute_ssd_read_intent(command);
++    } else if (std::strcmp(intent_kind, "dram_to_vram") == 0) {
++        llama_solidattention_execute_dram_to_vram_intent(command);
++    } else if (std::strcmp(intent_kind, "compute") == 0) {
++        llama_solidattention_execute_compute_intent(command);
++    } else if (std::strcmp(intent_kind, "ssd_write") == 0) {
++        llama_solidattention_execute_evict_intent(command);
++    } else {
++        ++llama_solidattention_kv_bridge_summary.executor_metadata_only_count;
++    }
++    llama_solidattention_refresh_executor_staging_counts();
++}
++
++static void llama_solidattention_write_kv_command_bridge_event(
++        uint32_t command_index,
++        const llama_solidattention_kv_command_record & command,
++        int32_t layer_id,
++        uint32_t block_id,
++        int64_t start_token,
++        int64_t end_token,
++        const char * shadow_before,
++        const char * shadow_after,
++        bool shadow_source_match,
++        const char * intent_kind,
++        uint32_t cache_size,
++        uint32_t n_tokens,
++        uint32_t n_stream) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_BRIDGE_TRACE_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "a");
++    if (!fp) {
++        return;
++    }
++
++    std::fprintf(fp,
++            "{\"op\":\"kv_command_bridge\",\"layer_id\":%d,\"block_id\":%u,"
++            "\"start_token\":%lld,\"end_token\":%lld,"
++            "\"metadata\":{\"source\":\"llama.cpp\","
++            "\"event\":\"kv_cache_apply_ubatch_command_bridge\","
++            "\"command_index\":%u,\"command_op\":\"%s\",\"command_block_id\":%lld,"
++            "\"command_start_token\":%lld,\"command_end_token\":%lld,"
++            "\"command_source\":\"%s\",\"command_target\":\"%s\","
++            "\"command_size_bytes\":%lld,\"ssd_offset\":%lld,"
++            "\"shadow_before\":\"%s\",\"shadow_after\":\"%s\","
++            "\"shadow_source_match\":%s,"
++            "\"movement_intent\":true,\"intent_kind\":\"%s\",\"blocking\":%s,"
++            "\"executor_enabled\":%s,\"executor_dram_buffer_count\":%u,"
++            "\"executor_vram_buffer_count\":%u,\"executor_missing_source_count\":%u,"
++            "\"cache_size\":%u,\"n_tokens\":%u,\"n_stream\":%u}}\n",
++            layer_id,
++            block_id,
++            (long long) start_token,
++            (long long) end_token,
++            command_index,
++            command.op,
++            (long long) command.block_id,
++            (long long) command.start_token,
++            (long long) command.end_token,
++            command.source,
++            command.target,
++            (long long) command.size_bytes,
++            (long long) command.ssd_offset,
++            shadow_before ? shadow_before : "unknown",
++            shadow_after ? shadow_after : "unknown",
++            shadow_source_match ? "true" : "false",
++            intent_kind ? intent_kind : "metadata",
++            command.blocking ? "true" : "false",
++            llama_solidattention_kv_bridge_summary.executor_enabled ? "true" : "false",
++            llama_solidattention_kv_bridge_summary.executor_dram_buffer_count,
++            llama_solidattention_kv_bridge_summary.executor_vram_buffer_count,
++            llama_solidattention_kv_bridge_summary.executor_missing_source_count,
++            cache_size,
++            n_tokens,
++            n_stream);
++
++    std::fclose(fp);
++}
++
++static void llama_solidattention_write_kv_command_bridge_summary() {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_BRIDGE_SUMMARY_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "w");
++    if (!fp) {
++        return;
++    }
++
++    std::fprintf(fp,
++            "{\"contract\":\"solidattention.llama_cpp.kv_command_bridge.v1\","
++            "\"backend\":\"llama.cpp\",\"adapter\":\"kv_command_live_bridge\","
++            "\"status\":\"ok\",\"runtime_layer_event_count\":%u,"
++            "\"matched_command_count\":%u,\"unmatched_layer_event_count\":%u,"
++            "\"kv_load_count\":%u,\"kv_prefetch_count\":%u,\"kv_compute_count\":%u,\"kv_evict_count\":%u,"
++            "\"ssd_read_command_count\":%u,\"ssd_write_command_count\":%u,"
++            "\"ssd_read_bytes\":%llu,\"ssd_write_bytes\":%llu,"
++            "\"movement_intent_count\":%u,\"blocking_movement_intent_count\":%u,"
++            "\"nonblocking_movement_intent_count\":%u,"
++            "\"ssd_read_intent_count\":%u,\"ssd_read_intent_bytes\":%llu,"
++            "\"dram_to_vram_intent_count\":%u,\"dram_to_vram_intent_bytes\":%llu,"
++            "\"compute_intent_count\":%u,\"compute_intent_bytes\":%llu,"
++            "\"ssd_write_intent_count\":%u,\"ssd_write_intent_bytes\":%llu,"
++            "\"executor_enabled\":%s,\"executor_backend\":\"%s\","
++            "\"executor_metadata_only_count\":%u,"
++            "\"executor_ssd_read_attempt_count\":%u,\"executor_ssd_read_success_count\":%u,"
++            "\"executor_ssd_read_error_count\":%u,\"executor_open_error_count\":%u,"
++            "\"executor_seek_error_count\":%u,\"executor_short_read_count\":%u,"
++            "\"executor_alloc_error_count\":%u,\"executor_backend_error_count\":%u,"
++            "\"executor_ssd_read_bytes\":%llu,"
++            "\"executor_staging_record_count\":%u,"
++            "\"executor_dram_buffer_count\":%u,\"executor_dram_buffer_bytes\":%llu,"
++            "\"executor_vram_buffer_count\":%u,\"executor_vram_buffer_bytes\":%llu,"
++            "\"executor_lazy_source_seed_count\":%u,\"executor_lazy_source_seed_bytes\":%llu,"
++            "\"executor_dram_to_vram_copy_count\":%u,\"executor_dram_to_vram_copy_bytes\":%llu,"
++            "\"executor_compute_resident_count\":%u,\"executor_compute_resident_bytes\":%llu,"
++            "\"executor_evict_count\":%u,\"executor_evict_bytes\":%llu,"
++            "\"executor_missing_source_count\":%u,\"executor_size_mismatch_count\":%u,"
++            "\"executor_staging_overflow_count\":%u,"
++            "\"executor_byte_range_block_count\":%u,\"executor_byte_range_count\":%u,"
++            "\"executor_byte_range_mapped_bytes\":%llu,"
++            "\"executor_byte_range_key_bytes\":%llu,\"executor_byte_range_value_bytes\":%llu,"
++            "\"executor_byte_range_inferred_row_size_count\":%u,"
++            "\"executor_byte_range_size_mismatch_count\":%u,"
++            "\"executor_byte_range_tensor_bounds_error_count\":%u,"
++            "\"executor_tensor_dry_run_enabled\":%s,"
++            "\"executor_tensor_dry_run_block_count\":%u,"
++            "\"executor_tensor_dry_run_range_count\":%u,"
++            "\"executor_tensor_dry_run_bytes\":%llu,"
++            "\"executor_tensor_dry_run_key_bytes\":%llu,"
++            "\"executor_tensor_dry_run_value_bytes\":%llu,"
++            "\"executor_tensor_dry_run_checksum_count\":%u,"
++            "\"executor_tensor_dry_run_checksum_xor\":%llu,"
++            "\"executor_tensor_dry_run_size_mismatch_count\":%u,"
++            "\"executor_tensor_dry_run_tensor_bounds_error_count\":%u,"
++            "\"executor_tensor_mutation_enabled\":%s,"
++            "\"executor_tensor_mutation_attempt_count\":%u,"
++            "\"executor_tensor_mutation_block_count\":%u,"
++            "\"executor_tensor_mutation_range_count\":%u,"
++            "\"executor_tensor_mutation_bytes\":%llu,"
++            "\"executor_tensor_mutation_key_bytes\":%llu,"
++            "\"executor_tensor_mutation_value_bytes\":%llu,"
++            "\"executor_tensor_mutation_checksum_count\":%u,"
++            "\"executor_tensor_mutation_staging_checksum_xor\":%llu,"
++            "\"executor_tensor_mutation_post_checksum_xor\":%llu,"
++            "\"executor_tensor_mutation_verify_error_count\":%u,"
++            "\"executor_tensor_mutation_size_mismatch_count\":%u,"
++            "\"executor_tensor_mutation_tensor_bounds_error_count\":%u,"
++            "\"executor_tensor_mutation_unsupported_count\":%u,"
++            "\"attention_gate_enabled\":%s,"
++            "\"attention_gate_view_count\":%u,"
++            "\"attention_gate_k_view_count\":%u,"
++            "\"attention_gate_v_view_count\":%u,"
++            "\"attention_gate_no_required_view_count\":%u,"
++            "\"attention_gate_required_block_count\":%u,"
++            "\"attention_gate_ready_block_count\":%u,"
++            "\"attention_gate_missing_block_count\":%u,"
++            "\"attention_gate_pending_mutation_count\":%u,"
++            "\"shadow_transition_count\":%u,\"shadow_source_match_count\":%u,"
++            "\"shadow_source_mismatch_count\":%u,\"shadow_block_count\":%u,"
++            "\"shadow_ssd_block_count\":%u,\"shadow_dram_block_count\":%u,\"shadow_vram_block_count\":%u,"
++            "\"command_record_count\":%u,\"cache_size\":%u,\"n_tokens_last\":%u,\"n_stream_last\":%u}\n",
++            llama_solidattention_kv_bridge_summary.runtime_layer_event_count,
++            llama_solidattention_kv_bridge_summary.matched_command_count,
++            llama_solidattention_kv_bridge_summary.unmatched_layer_event_count,
++            llama_solidattention_kv_bridge_summary.kv_load_count,
++            llama_solidattention_kv_bridge_summary.kv_prefetch_count,
++            llama_solidattention_kv_bridge_summary.kv_compute_count,
++            llama_solidattention_kv_bridge_summary.kv_evict_count,
++            llama_solidattention_kv_bridge_summary.ssd_read_command_count,
++            llama_solidattention_kv_bridge_summary.ssd_write_command_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.ssd_read_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.ssd_write_bytes,
++            llama_solidattention_kv_bridge_summary.movement_intent_count,
++            llama_solidattention_kv_bridge_summary.blocking_movement_intent_count,
++            llama_solidattention_kv_bridge_summary.nonblocking_movement_intent_count,
++            llama_solidattention_kv_bridge_summary.ssd_read_intent_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.ssd_read_intent_bytes,
++            llama_solidattention_kv_bridge_summary.dram_to_vram_intent_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.dram_to_vram_intent_bytes,
++            llama_solidattention_kv_bridge_summary.compute_intent_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.compute_intent_bytes,
++            llama_solidattention_kv_bridge_summary.ssd_write_intent_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.ssd_write_intent_bytes,
++            llama_solidattention_kv_bridge_summary.executor_enabled ? "true" : "false",
++            llama_solidattention_kv_executor_backend_name(),
++            llama_solidattention_kv_bridge_summary.executor_metadata_only_count,
++            llama_solidattention_kv_bridge_summary.executor_ssd_read_attempt_count,
++            llama_solidattention_kv_bridge_summary.executor_ssd_read_success_count,
++            llama_solidattention_kv_bridge_summary.executor_ssd_read_error_count,
++            llama_solidattention_kv_bridge_summary.executor_open_error_count,
++            llama_solidattention_kv_bridge_summary.executor_seek_error_count,
++            llama_solidattention_kv_bridge_summary.executor_short_read_count,
++            llama_solidattention_kv_bridge_summary.executor_alloc_error_count,
++            llama_solidattention_kv_bridge_summary.executor_backend_error_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_ssd_read_bytes,
++            llama_solidattention_kv_bridge_summary.executor_staging_record_count,
++            llama_solidattention_kv_bridge_summary.executor_dram_buffer_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_dram_buffer_bytes,
++            llama_solidattention_kv_bridge_summary.executor_vram_buffer_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_vram_buffer_bytes,
++            llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_lazy_source_seed_bytes,
++            llama_solidattention_kv_bridge_summary.executor_dram_to_vram_copy_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_dram_to_vram_copy_bytes,
++            llama_solidattention_kv_bridge_summary.executor_compute_resident_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_compute_resident_bytes,
++            llama_solidattention_kv_bridge_summary.executor_evict_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_evict_bytes,
++            llama_solidattention_kv_bridge_summary.executor_missing_source_count,
++            llama_solidattention_kv_bridge_summary.executor_size_mismatch_count,
++            llama_solidattention_kv_bridge_summary.executor_staging_overflow_count,
++            llama_solidattention_kv_bridge_summary.executor_byte_range_block_count,
++            llama_solidattention_kv_bridge_summary.executor_byte_range_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_byte_range_mapped_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_byte_range_key_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_byte_range_value_bytes,
++            llama_solidattention_kv_bridge_summary.executor_byte_range_inferred_row_size_count,
++            llama_solidattention_kv_bridge_summary.executor_byte_range_size_mismatch_count,
++            llama_solidattention_kv_bridge_summary.executor_byte_range_tensor_bounds_error_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_enabled ? "true" : "false",
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_block_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_range_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_key_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_value_bytes,
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_checksum_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_checksum_xor,
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_size_mismatch_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_dry_run_tensor_bounds_error_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_enabled ? "true" : "false",
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_attempt_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_block_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_range_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_mutation_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_mutation_key_bytes,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_mutation_value_bytes,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_checksum_count,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_mutation_staging_checksum_xor,
++            (unsigned long long) llama_solidattention_kv_bridge_summary.executor_tensor_mutation_post_checksum_xor,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_verify_error_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_size_mismatch_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_tensor_bounds_error_count,
++            llama_solidattention_kv_bridge_summary.executor_tensor_mutation_unsupported_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_enabled ? "true" : "false",
++            llama_solidattention_kv_bridge_summary.attention_gate_view_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_k_view_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_v_view_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_no_required_view_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_required_block_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_ready_block_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_missing_block_count,
++            llama_solidattention_kv_bridge_summary.attention_gate_pending_mutation_count,
++            llama_solidattention_kv_bridge_summary.shadow_transition_count,
++            llama_solidattention_kv_bridge_summary.shadow_source_match_count,
++            llama_solidattention_kv_bridge_summary.shadow_source_mismatch_count,
++            llama_solidattention_kv_bridge_summary.shadow_block_count,
++            llama_solidattention_kv_bridge_summary.shadow_ssd_block_count,
++            llama_solidattention_kv_bridge_summary.shadow_dram_block_count,
++            llama_solidattention_kv_bridge_summary.shadow_vram_block_count,
++            llama_solidattention_kv_bridge_summary.command_record_count,
++            llama_solidattention_kv_bridge_summary.cache_size,
++            llama_solidattention_kv_bridge_summary.n_tokens_last,
++            llama_solidattention_kv_bridge_summary.n_stream_last);
++
++    std::fclose(fp);
++}
++
++static bool llama_solidattention_attention_command_requires_residency(
++        const llama_solidattention_kv_command_record & command) {
++    return std::strcmp(command.op, "kv_compute") == 0 || std::strcmp(command.target, "vram") == 0;
++}
++
++static bool llama_solidattention_attention_command_overlaps_view(
++        const llama_solidattention_kv_command_record & command,
++        int32_t layer_id,
++        uint32_t n_kv) {
++    if (command.layer_id != layer_id || !llama_solidattention_attention_command_requires_residency(command)) {
++        return false;
++    }
++    const int64_t token_count = command.end_token - command.start_token;
++    if (command.block_id < 0 || token_count <= 0) {
++        return false;
++    }
++    const uint64_t cell_start = (uint64_t) command.block_id;
++    const uint64_t cell_end = cell_start + (uint64_t) token_count;
++    return cell_start < (uint64_t) n_kv && cell_end > 0;
++}
++
++static bool llama_solidattention_attention_command_key_seen(
++        uint32_t upto,
++        const llama_solidattention_kv_command_record & command,
++        int32_t layer_id,
++        uint32_t n_kv) {
++    for (uint32_t i = 0; i < upto; ++i) {
++        const auto & previous = llama_solidattention_kv_command_records[i];
++        if (!llama_solidattention_attention_command_overlaps_view(previous, layer_id, n_kv)) {
++            continue;
++        }
++        if (previous.layer_id == command.layer_id &&
++                previous.block_id == command.block_id &&
++                previous.start_token == command.start_token &&
++                previous.end_token == command.end_token) {
++            return true;
++        }
++    }
++    return false;
+ }
+ 
++static llama_solidattention_kv_staging_record * llama_solidattention_find_staging_record_by_key(
++        int64_t layer_id,
++        int64_t block_id,
++        int64_t start_token,
++        int64_t end_token) {
++    for (uint32_t i = 0; i < llama_solidattention_kv_staging_record_count; ++i) {
++        auto & record = llama_solidattention_kv_staging_records[i];
++        if (record.layer_id == layer_id &&
++                record.block_id == block_id &&
++                record.start_token == start_token &&
++                record.end_token == end_token) {
++            return &record;
++        }
++    }
++    return nullptr;
++}
++
++static void llama_solidattention_write_attention_gate_event(
++        const char * view,
++        int32_t layer_id,
++        uint32_t n_kv,
++        uint32_t n_stream,
++        uint32_t required_block_count,
++        uint32_t ready_block_count,
++        uint32_t missing_block_count,
++        uint32_t pending_mutation_count) {
++    const char * path = std::getenv("LLAMA_SOLIDATTENTION_KV_ATTENTION_GATE_TRACE_PATH");
++    if (!path || path[0] == '\0') {
++        return;
++    }
++
++    FILE * fp = std::fopen(path, "a");
++    if (!fp) {
++        return;
++    }
++
++    const char * status = "ok";
++    if (required_block_count == 0) {
++        status = "no_required_blocks";
++    } else if (missing_block_count > 0) {
++        status = "missing_staging";
++    } else if (pending_mutation_count > 0) {
++        status = "pending_mutation";
++    }
++
++    std::fprintf(fp,
++            "{\"op\":\"kv_attention_residency_gate\",\"layer_id\":%lld,\"block_id\":-1,"
++            "\"start_token\":0,\"end_token\":%u,\"size_bytes\":0,"
++            "\"metadata\":{\"source\":\"llama.cpp\","
++            "\"event\":\"solidattention_attention_residency_gate\","
++            "\"view\":\"%s\",\"status\":\"%s\",\"n_kv\":%u,\"n_stream\":%u,"
++            "\"required_block_count\":%u,\"ready_block_count\":%u,"
++            "\"missing_block_count\":%u,\"pending_mutation_count\":%u}}\n",
++            (long long) layer_id,
++            n_kv,
++            view ? view : "unknown",
++            status,
++            n_kv,
++            n_stream,
++            required_block_count,
++            ready_block_count,
++            missing_block_count,
++            pending_mutation_count);
++
++    std::fclose(fp);
++}
++
++static void llama_solidattention_attention_residency_gate(
++        const char * view,
++        int32_t layer_id,
++        uint32_t n_kv,
++        uint32_t n_stream) {
++    if (!llama_solidattention_kv_attention_gate_enabled()) {
++        return;
++    }
++
++    llama_solidattention_kv_bridge_summary.attention_gate_enabled = 1;
++    ++llama_solidattention_kv_bridge_summary.attention_gate_view_count;
++    if (view && std::strcmp(view, "k") == 0) {
++        ++llama_solidattention_kv_bridge_summary.attention_gate_k_view_count;
++    } else if (view && std::strcmp(view, "v") == 0) {
++        ++llama_solidattention_kv_bridge_summary.attention_gate_v_view_count;
++    }
++
++    uint32_t required_block_count = 0;
++    uint32_t ready_block_count = 0;
++    uint32_t missing_block_count = 0;
++    uint32_t pending_mutation_count = 0;
++
++    for (uint32_t i = 0; i < llama_solidattention_kv_command_record_count; ++i) {
++        const auto & command = llama_solidattention_kv_command_records[i];
++        if (!llama_solidattention_attention_command_overlaps_view(command, layer_id, n_kv) ||
++                llama_solidattention_attention_command_key_seen(i, command, layer_id, n_kv)) {
++            continue;
++        }
++
++        ++required_block_count;
++        auto * record = llama_solidattention_find_staging_record_by_key(
++                command.layer_id,
++                command.block_id,
++                command.start_token,
++                command.end_token);
++        if (!record || !record->vram_buffer) {
++            ++missing_block_count;
++        } else if (!record->tensor_mutation_checked) {
++            ++pending_mutation_count;
++        } else {
++            ++ready_block_count;
++        }
++    }
++
++    if (required_block_count == 0) {
++        ++llama_solidattention_kv_bridge_summary.attention_gate_no_required_view_count;
++    }
++    llama_solidattention_kv_bridge_summary.attention_gate_required_block_count += required_block_count;
++    llama_solidattention_kv_bridge_summary.attention_gate_ready_block_count += ready_block_count;
++    llama_solidattention_kv_bridge_summary.attention_gate_missing_block_count += missing_block_count;
++    llama_solidattention_kv_bridge_summary.attention_gate_pending_mutation_count += pending_mutation_count;
++
++    llama_solidattention_write_attention_gate_event(
++            view,
++            layer_id,
++            n_kv,
++            n_stream,
++            required_block_count,
++            ready_block_count,
++            missing_block_count,
++            pending_mutation_count);
++    llama_solidattention_write_kv_command_bridge_summary();
++}
++
++static void llama_solidattention_kv_command_bridge_apply(
++        int32_t layer_id,
++        uint32_t block_id,
++        int64_t start_token,
++        int64_t end_token,
++        uint32_t cache_size,
++        uint32_t n_tokens,
++        uint32_t n_stream,
++        ggml_tensor * k_tensor,
++        ggml_tensor * v_tensor,
++        bool v_trans) {
++    if (!llama_solidattention_kv_command_bridge_enabled() ||
++            !llama_solidattention_kv_command_records_ready ||
++            !llama_solidattention_kv_command_records_valid) {
++        return;
++    }
++
++    ++llama_solidattention_kv_bridge_summary.runtime_layer_event_count;
++    llama_solidattention_kv_bridge_summary.command_record_count = llama_solidattention_kv_command_record_count;
++    llama_solidattention_kv_bridge_summary.cache_size = cache_size;
++    llama_solidattention_kv_bridge_summary.n_tokens_last = n_tokens;
++    llama_solidattention_kv_bridge_summary.n_stream_last = n_stream;
++
++    uint32_t matches = 0;
++    const char * initial_shadow_location = nullptr;
++    for (uint32_t i = 0; i < llama_solidattention_kv_command_record_count; ++i) {
++        const auto & command = llama_solidattention_kv_command_records[i];
++        if (llama_solidattention_kv_command_matches_runtime(command, layer_id, block_id, start_token, end_token)) {
++            initial_shadow_location = command.source;
++            break;
++        }
++    }
++
++    if (initial_shadow_location) {
++        llama_solidattention_reset_shadow_record_for_runtime_event(layer_id, block_id, start_token, end_token, initial_shadow_location);
++    }
++
++    for (uint32_t i = 0; i < llama_solidattention_kv_command_record_count; ++i) {
++        const auto & command = llama_solidattention_kv_command_records[i];
++        if (!llama_solidattention_kv_command_matches_runtime(command, layer_id, block_id, start_token, end_token)) {
++            continue;
++        }
++
++        auto * shadow = llama_solidattention_find_or_create_shadow_record(layer_id, block_id, start_token, end_token, command.source);
++        char shadow_before[16];
++        char shadow_after[16];
++        bool shadow_source_match = false;
++        if (shadow) {
++            std::snprintf(shadow_before, sizeof(shadow_before), "%s", shadow->location);
++            shadow_source_match = std::strcmp(shadow_before, command.source) == 0;
++            std::snprintf(shadow->location, sizeof(shadow->location), "%s", command.target);
++            std::snprintf(shadow_after, sizeof(shadow_after), "%s", shadow->location);
++        } else {
++            std::snprintf(shadow_before, sizeof(shadow_before), "%s", command.source);
++            std::snprintf(shadow_after, sizeof(shadow_after), "%s", command.target);
++            shadow_source_match = true;
++        }
++
++        ++matches;
++        ++llama_solidattention_kv_bridge_summary.matched_command_count;
++        ++llama_solidattention_kv_bridge_summary.shadow_transition_count;
++        if (shadow_source_match) {
++            ++llama_solidattention_kv_bridge_summary.shadow_source_match_count;
++        } else {
++            ++llama_solidattention_kv_bridge_summary.shadow_source_mismatch_count;
++        }
++
++        const char * intent_kind = llama_solidattention_movement_intent_kind(command);
++        llama_solidattention_record_movement_intent(command, intent_kind);
++        llama_solidattention_execute_movement_intent_stub(command, intent_kind);
++        if (auto * staging_record = llama_solidattention_find_staging_record(command)) {
++            llama_solidattention_executor_tensor_mutation_gate(*staging_record, k_tensor, v_tensor, v_trans);
++        }
++
++        if (std::strcmp(command.op, "kv_load") == 0) {
++            ++llama_solidattention_kv_bridge_summary.kv_load_count;
++        } else if (std::strcmp(command.op, "kv_prefetch") == 0) {
++            ++llama_solidattention_kv_bridge_summary.kv_prefetch_count;
++        } else if (std::strcmp(command.op, "kv_compute") == 0) {
++            ++llama_solidattention_kv_bridge_summary.kv_compute_count;
++        } else if (std::strcmp(command.op, "kv_evict") == 0) {
++            ++llama_solidattention_kv_bridge_summary.kv_evict_count;
++        }
++
++        if ((std::strcmp(command.op, "kv_load") == 0 || std::strcmp(command.op, "kv_prefetch") == 0) && std::strcmp(command.source, "ssd") == 0) {
++            ++llama_solidattention_kv_bridge_summary.ssd_read_command_count;
++            llama_solidattention_kv_bridge_summary.ssd_read_bytes += (uint64_t) command.size_bytes;
++        }
++
++        if (std::strcmp(command.op, "kv_evict") == 0 && std::strcmp(command.target, "ssd") == 0) {
++            ++llama_solidattention_kv_bridge_summary.ssd_write_command_count;
++            llama_solidattention_kv_bridge_summary.ssd_write_bytes += (uint64_t) command.size_bytes;
++        }
++
++        llama_solidattention_refresh_shadow_location_counts();
++        llama_solidattention_write_kv_command_bridge_event(
++                i,
++                command,
++                layer_id,
++                block_id,
++                start_token,
++                end_token,
++                shadow_before,
++                shadow_after,
++                shadow_source_match,
++                intent_kind,
++                cache_size,
++                n_tokens,
++                n_stream);
++    }
++
++    if (matches == 0) {
++        ++llama_solidattention_kv_bridge_summary.unmatched_layer_event_count;
++    }
++
++    llama_solidattention_write_kv_command_bridge_summary();
++}
++
++static void llama_solidattention_kv_command_dry_run_once(
++        const std::vector<uint32_t> & layer_ids,
++        uint32_t cache_size) {
++    if (!llama_solidattention_kv_command_enabled()) {
++        return;
++    }
++
++    static bool done = false;
++    if (done) {
++        return;
++    }
++    done = true;
++
++    llama_solidattention_kv_command_record_count = 0;
++    llama_solidattention_kv_shadow_record_count = 0;
++    llama_solidattention_free_executor_staging_records();
++    llama_solidattention_kv_bridge_summary = llama_solidattention_kv_command_bridge_summary();
++    llama_solidattention_kv_command_records_ready = false;
++    llama_solidattention_kv_command_records_valid = false;
++
++    llama_solidattention_kv_command_summary summary;
++    summary.layer_count = (uint32_t) layer_ids.size();
++    summary.cache_size = cache_size;
++
++    const char * command_path = std::getenv("LLAMA_SOLIDATTENTION_KV_COMMAND_PATH");
++    FILE * fp = std::fopen(command_path, "r");
++    if (!fp) {
++        summary.command_file_open_error = 1;
++        llama_solidattention_write_kv_command_summary("missing_command_file", summary);
++        return;
++    }
++
++    char line[8192];
++    while (std::fgets(line, sizeof(line), fp)) {
++        const char * start = llama_solidattention_skip_json_ws(line);
++        if (*start == '\0' || *start == '\n' || *start == '\r') {
++            continue;
++        }
++
++        ++summary.command_count;
++
++        char op[32];
++        char source[16];
++        char target[16];
++        int64_t layer_id = -1;
++        int64_t block_id = -1;
++        int64_t start_token = -1;
++        int64_t end_token = -1;
++        int64_t size_bytes = -1;
++        int64_t ssd_offset = -1;
++        bool blocking = false;
++
++        const bool fields_ok =
++            llama_solidattention_json_string(line, "op", op, sizeof(op)) &&
++            llama_solidattention_json_i64(line, "layer_id", &layer_id) &&
++            llama_solidattention_json_i64(line, "block_id", &block_id) &&
++            llama_solidattention_json_i64(line, "start_token", &start_token) &&
++            llama_solidattention_json_i64(line, "end_token", &end_token) &&
++            llama_solidattention_json_i64(line, "size_bytes", &size_bytes) &&
++            llama_solidattention_json_string(line, "source", source, sizeof(source)) &&
++            llama_solidattention_json_string(line, "target", target, sizeof(target)) &&
++            llama_solidattention_json_i64(line, "ssd_offset", &ssd_offset) &&
++            llama_solidattention_json_bool(line, "blocking", &blocking);
++
++        bool valid = fields_ok;
++        if (!fields_ok) {
++            ++summary.missing_field_count;
++        }
++
++        if (valid && !llama_solidattention_is_command_op(op)) {
++            ++summary.unknown_op_count;
++            valid = false;
++        }
++
++        if (valid && !llama_solidattention_has_layer_id(layer_ids, layer_id)) {
++            ++summary.unknown_layer_count;
++            valid = false;
++        }
++
++        if (valid && (block_id < 0 || (uint64_t) block_id >= (uint64_t) cache_size)) {
++            ++summary.out_of_range_block_count;
++            valid = false;
++        }
++
++        if (valid && (start_token < 0 || end_token <= start_token)) {
++            ++summary.invalid_token_range_count;
++            valid = false;
++        }
++
++        if (valid && (size_bytes <= 0 || ssd_offset < 0)) {
++            ++summary.invalid_size_count;
++            valid = false;
++        }
++
++        if (valid && (!llama_solidattention_is_location(source) || !llama_solidattention_is_location(target))) {
++            ++summary.invalid_location_count;
++            valid = false;
++        }
++
++        if (valid && std::strcmp(op, "kv_compute") == 0 && (std::strcmp(source, "vram") != 0 || std::strcmp(target, "vram") != 0)) {
++            ++summary.invalid_location_count;
++            valid = false;
++        }
++
++        if (valid && std::strcmp(op, "kv_evict") == 0 && std::strcmp(target, "ssd") != 0) {
++            ++summary.invalid_location_count;
++            valid = false;
++        }
++
++        if (valid) {
++            llama_solidattention_record_command_counts(summary, op, source, target, size_bytes);
++            llama_solidattention_store_command_record(op, source, target, layer_id, block_id, start_token, end_token, size_bytes, ssd_offset, blocking);
++        } else {
++            ++summary.invalid_command_count;
++        }
++    }
++
++    std::fclose(fp);
++
++    llama_solidattention_kv_command_records_ready = true;
++    llama_solidattention_kv_command_records_valid = summary.invalid_command_count == 0;
++
++    llama_solidattention_write_kv_command_summary(
++            summary.invalid_command_count == 0 ? "ok" : "invalid",
++            summary);
++}
++
++
+ // orthonormal Walsh-Hadamard rotation matrix
+ // note: res^2 == I
+ static void ggml_gen_hadamard(ggml_tensor * tensor) {
+@@ -392,6 +2532,19 @@ bool llama_kv_cache::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+         p1 = std::numeric_limits<llama_pos>::max();
+     }
+ 
++    uint32_t solidattention_removed_count = 0;
++    uint32_t solidattention_first_removed = 0;
++    llama_pos solidattention_pos_min = std::numeric_limits<llama_pos>::max();
++    llama_pos solidattention_pos_max = std::numeric_limits<llama_pos>::min();
++    auto solidattention_note_removed = [&](uint32_t idx, llama_pos pos) {
++        if (solidattention_removed_count == 0 || idx < solidattention_first_removed) {
++            solidattention_first_removed = idx;
++        }
++        ++solidattention_removed_count;
++        solidattention_pos_min = std::min(solidattention_pos_min, pos);
++        solidattention_pos_max = std::max(solidattention_pos_max, pos);
++    };
++
+     if (seq_id >= 0) {
+         auto & cells = v_cells[seq_to_stream[seq_id]];
+         auto & head  = v_heads[seq_to_stream[seq_id]];
+@@ -403,7 +2556,9 @@ bool llama_kv_cache::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+                 continue;
+             }
+ 
++            const llama_pos pos = cells.pos_get(i);
+             if (cells.seq_has(i, seq_id) && cells.seq_rm(i, seq_id)) {
++                solidattention_note_removed(i, pos);
+                 if (new_head == cells.size()) {
+                     new_head = i;
+                 }
+@@ -427,6 +2582,7 @@ bool llama_kv_cache::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+                     continue;
+                 }
+ 
++                solidattention_note_removed(i, cells.pos_get(i));
+                 cells.rm(i);
+ 
+                 if (new_head == cells.size()) {
+@@ -441,6 +2597,37 @@ bool llama_kv_cache::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) {
+         }
+     }
+ 
++    if (llama_solidattention_kv_trace_enabled() && solidattention_removed_count > 0) {
++        const uint64_t cache_cells =
++            (uint64_t) get_size() * (uint64_t) std::max<uint32_t>(1, n_stream);
++
++        for (const auto & layer : layers) {
++            const size_t layer_bytes =
++                (layer.k ? ggml_nbytes(layer.k) : 0) +
++                (layer.v ? ggml_nbytes(layer.v) : 0);
++
++            const size_t touched_bytes = cache_cells > 0
++                ? (size_t) (((uint64_t) layer_bytes * (uint64_t) solidattention_removed_count + cache_cells - 1) / cache_cells)
++                : 0;
++
++            llama_solidattention_kv_trace_event(
++                    "kv_evict",
++                    "kv_cache_seq_rm",
++                    (int32_t) layer.il,
++                    solidattention_first_removed,
++                    (int64_t) solidattention_pos_min,
++                    (int64_t) solidattention_pos_max + 1,
++                    touched_bytes,
++                    "ssd",
++                    "dram",
++                    "ssd",
++                    -1,
++                    get_size(),
++                    solidattention_removed_count,
++                    n_stream);
++        }
++    }
++
+     return true;
+ }
+ 
+@@ -1166,6 +3353,77 @@ void llama_kv_cache::apply_ubatch(const slot_info & sinfo, const llama_ubatch &
+ 
+         head = sinfo.idxs[s].back() + 1;
+     }
++
++    llama_solidattention_kv_command_dry_run_once(get_layer_ids(), get_size());
++
++    if (llama_solidattention_kv_command_bridge_enabled()) {
++        llama_pos pos_min = ubatch.pos[0];
++        llama_pos pos_max = ubatch.pos[0];
++
++        for (uint32_t i = 1; i < ubatch.n_tokens; ++i) {
++            pos_min = std::min(pos_min, ubatch.pos[i]);
++            pos_max = std::max(pos_max, ubatch.pos[i]);
++        }
++
++        const uint32_t block_id =
++            (!sinfo.idxs.empty() && !sinfo.idxs[0].empty()) ? sinfo.idxs[0][0] : 0;
++
++        for (const auto & layer : layers) {
++            llama_solidattention_kv_command_bridge_apply(
++                    (int32_t) layer.il,
++                    block_id,
++                    (int64_t) pos_min,
++                    (int64_t) pos_max + 1,
++                    get_size(),
++                    ubatch.n_tokens,
++                    n_stream,
++                    layer.k,
++                    layer.v,
++                    v_trans);
++        }
++    }
++
++    if (llama_solidattention_kv_trace_enabled()) {
++        llama_pos pos_min = ubatch.pos[0];
++        llama_pos pos_max = ubatch.pos[0];
++
++        for (uint32_t i = 1; i < ubatch.n_tokens; ++i) {
++            pos_min = std::min(pos_min, ubatch.pos[i]);
++            pos_max = std::max(pos_max, ubatch.pos[i]);
++        }
++
++        const uint32_t block_id =
++            (!sinfo.idxs.empty() && !sinfo.idxs[0].empty()) ? sinfo.idxs[0][0] : 0;
++
++        const uint64_t cache_cells =
++            (uint64_t) get_size() * (uint64_t) std::max<uint32_t>(1, n_stream);
++
++        for (const auto & layer : layers) {
++            const size_t layer_bytes =
++                (layer.k ? ggml_nbytes(layer.k) : 0) +
++                (layer.v ? ggml_nbytes(layer.v) : 0);
++
++            const size_t touched_bytes = cache_cells > 0
++                ? (size_t) (((uint64_t) layer_bytes * (uint64_t) ubatch.n_tokens + cache_cells - 1) / cache_cells)
++                : 0;
++
++            llama_solidattention_kv_trace_event(
++                    "kv_add",
++                    "kv_cache_apply_ubatch",
++                    (int32_t) layer.il,
++                    block_id,
++                    (int64_t) pos_min,
++                    (int64_t) pos_max + 1,
++                    touched_bytes,
++                    "dram",
++                    "runtime",
++                    "dram",
++                    -1,
++                    get_size(),
++                    ubatch.n_tokens,
++                    n_stream);
++        }
++    }
+ }
+ 
+ bool llama_kv_cache::get_can_shift() const {
+@@ -1252,6 +3510,8 @@ ggml_tensor * llama_kv_cache::get_k(ggml_context * ctx, int32_t il, uint32_t n_k
+ 
+     const uint32_t ns = sinfo.s1 - sinfo.s0 + 1;
+ 
++    llama_solidattention_attention_residency_gate("k", il, n_kv, ns);
++
+     return ggml_view_4d(ctx, k,
+             hparams.n_embd_head_k(il), hparams.n_head_kv(il), n_kv, ns,
+             ggml_row_size(k->type, hparams.n_embd_head_k(il)),
+@@ -1273,6 +3533,8 @@ ggml_tensor * llama_kv_cache::get_v(ggml_context * ctx, int32_t il, uint32_t n_k
+ 
+     const uint32_t ns = sinfo.s1 - sinfo.s0 + 1;
+ 
++    llama_solidattention_attention_residency_gate("v", il, n_kv, ns);
++
+     if (!v_trans) {
+         // note: v->nb[1] <= v->nb[2]
+         return ggml_view_4d(ctx, v,
+diff --git a/tests/test-llama-archs.cpp b/tests/test-llama-archs.cpp
+index f39abe7..0600617 100644
+--- a/tests/test-llama-archs.cpp
++++ b/tests/test-llama-archs.cpp
+@@ -14,6 +14,7 @@
+ #include <cinttypes>
+ #include <cstddef>
+ #include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <cstdint>
+ #include <random>
+@@ -315,6 +316,15 @@ static std::vector<float> get_logits(
+             ret.push_back(logits_ith[j]);
+         }
+     }
++    const char * evict_smoke = std::getenv("LLAMA_SOLIDATTENTION_KV_TRACE_EVICT_SMOKE");
++    if (evict_smoke && evict_smoke[0] != '\0') {
++        const llama_pos evict_start = (llama_pos) (n_tokens / 2);
++        if (!llama_memory_seq_rm(llama_get_memory(lctx), 0, evict_start, -1)) {
++            llama_batch_free(batch);
++            throw std::runtime_error("failed to run SolidAttention KV eviction smoke");
++        }
++    }
++
+     llama_batch_free(batch);
+     return ret;
+ }

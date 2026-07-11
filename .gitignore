@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Local tools and editors
+.codex/
+.agents/
+.vscode/
+.idea/
+
+# Generated experiment and check artifacts
+outputs/
+
+# Dependency and build caches
+.deps/
+solid_attention_deps/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Compiled I/O tools
+/io/block_io_probe
+/io/block_io_probe.exe
+/io/runtime_kv_command_consumer
+/io/runtime_kv_command_consumer.exe
+/io/*.o
+/io/*.obj
+
+# Models, checkpoints, and secrets
+FlexGen/
+*.gguf
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+.env
+*.key
+*.pem

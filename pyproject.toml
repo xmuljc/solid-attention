@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "solidattention-harness"
+version = "0.1.0"
+description = "Harness-first reproduction of SolidAttention mechanisms"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest==8.4.1"]
+
+[tool.setuptools]
+packages = [
+  "core",
+  "harness",
+  "integrations",
+  "integrations.llama_cpp",
+  "tools",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]
+markers = [
+  "io: requires a Linux C/POSIX toolchain",
+  "liburing: requires Linux and liburing",
+  "llama: requires the pinned llama.cpp submodule",
+]
