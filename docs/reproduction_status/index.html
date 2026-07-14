@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>SolidAttention Reproduction Status</title>
+<title>SolidAttention 复现状态</title>
 <style>
-body { margin: 0; background: #e5e7eb; color: #111827; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+body { margin: 0; background: #e5e7eb; color: #111827; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }
 main { max-width: 1180px; margin: 0 auto; padding: 32px 20px; }
 h1 { margin: 0 0 8px; font-size: 30px; }
 p { color: #475569; margin: 0 0 24px; }
@@ -16,12 +16,12 @@ img { width: 100%; height: auto; display: block; }
 </head>
 <body>
 <main>
-<h1>SolidAttention Reproduction Status</h1>
-<p>Static figures generated from harness trace, parity verification, and ablation metrics artifacts.</p>
-<section><h2>Reproduction Coverage Matrix</h2><img src="01_reproduction_coverage_matrix.svg" alt="01_reproduction_coverage_matrix.svg"/></section>
-<section><h2>Python Cpp Parity Ladder</h2><img src="02_python_cpp_parity_ladder.svg" alt="02_python_cpp_parity_ladder.svg"/></section>
-<section><h2>Tier Movement Timeline</h2><img src="03_tier_movement_timeline.svg" alt="03_tier_movement_timeline.svg"/></section>
-<section><h2>Ablation Latency Eviction</h2><img src="04_ablation_latency_eviction.svg" alt="04_ablation_latency_eviction.svg"/></section>
+<h1>SolidAttention 复现状态</h1>
+<p>这些静态图由仿真框架轨迹、对齐验证结果和消融实验指标生成。</p>
+<section><h2>复现覆盖矩阵</h2><img src="01_reproduction_coverage_matrix.svg" alt="复现覆盖矩阵"/></section>
+<section><h2>Python 与 C++ 对齐阶梯</h2><img src="02_python_cpp_parity_ladder.svg" alt="Python 与 C++ 对齐阶梯"/></section>
+<section><h2>三层 KV 迁移时间线</h2><img src="03_tier_movement_timeline.svg" alt="三层 KV 迁移时间线"/></section>
+<section><h2>消融延迟与驱逐统计</h2><img src="04_ablation_latency_eviction.svg" alt="消融延迟与驱逐统计"/></section>
 </main>
 </body>
 </html>

@@ -1,47 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="590" viewBox="0 0 880 590">
 <rect width="880" height="590" fill="#f8fafc"/>
 <style>
-text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+text { font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .title { font-size: 24px; font-weight: 700; fill: #111827; }
 .subtitle { font-size: 13px; fill: #64748b; }
 .label { font-size: 13px; fill: #111827; }
 .small { font-size: 11px; fill: #64748b; }
 </style>
-<text x="40.00" y="42.00" class="title" text-anchor="start">Python vs C++ Parity Ladder</text>
-<text x="40.00" y="66.00" class="subtitle" text-anchor="start">What currently matches, and where reproduction still diverges</text>
+<text x="40.00" y="42.00" class="title" text-anchor="start">Python 与 C++ 对齐阶梯</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">展示当前已经对齐的部分，以及仍然存在的复现差距</text>
 <rect x="30.00" y="88.00" width="820.00" height="460.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
 <circle cx="90" cy="260" r="34" fill="#16a34a"/>
 <text x="90" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
-<text x="90.00" y="322.00" class="label" text-anchor="middle">Python scheduler</text>
-<text x="90.00" y="344.00" class="small" text-anchor="middle">live decisions + tier capacity</text>
+<text x="90.00" y="322.00" class="label" text-anchor="middle">Python 调度器</text>
+<text x="90.00" y="344.00" class="small" text-anchor="middle">实时决策 + 三层容量</text>
 <line x1="126.00" y1="260.00" x2="194.00" y2="260.00" stroke="#d9e2ec" stroke-width="3.00"/>
 <circle cx="230" cy="260" r="34" fill="#16a34a"/>
 <text x="230" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
-<text x="230.00" y="322.00" class="label" text-anchor="middle">Command bridge</text>
-<text x="230.00" y="344.00" class="small" text-anchor="middle">2 prefetch commands</text>
+<text x="230.00" y="322.00" class="label" text-anchor="middle">命令桥接</text>
+<text x="230.00" y="344.00" class="small" text-anchor="middle">2 条预取命令</text>
 <line x1="266.00" y1="260.00" x2="334.00" y2="260.00" stroke="#d9e2ec" stroke-width="3.00"/>
 <circle cx="370" cy="260" r="34" fill="#16a34a"/>
 <text x="370" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
-<text x="370.00" y="322.00" class="label" text-anchor="middle">C++ runtime gate</text>
-<text x="370.00" y="344.00" class="small" text-anchor="middle">queue depth 2</text>
+<text x="370.00" y="322.00" class="label" text-anchor="middle">C++ 运行时门控</text>
+<text x="370.00" y="344.00" class="small" text-anchor="middle">队列深度 2</text>
 <line x1="406.00" y1="260.00" x2="474.00" y2="260.00" stroke="#d9e2ec" stroke-width="3.00"/>
 <circle cx="510" cy="260" r="34" fill="#16a34a"/>
 <text x="510" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
-<text x="510.00" y="322.00" class="label" text-anchor="middle">Event-kind parity</text>
-<text x="510.00" y="344.00" class="small" text-anchor="middle">288 events match</text>
+<text x="510.00" y="322.00" class="label" text-anchor="middle">事件类型对齐</text>
+<text x="510.00" y="344.00" class="small" text-anchor="middle">288 个事件匹配</text>
 <line x1="546.00" y1="260.00" x2="614.00" y2="260.00" stroke="#d9e2ec" stroke-width="3.00"/>
 <circle cx="650" cy="260" r="34" fill="#dc2626"/>
 <text x="650" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
-<text x="650.00" y="322.00" class="label" text-anchor="middle">Block identity parity</text>
-<text x="650.00" y="344.00" class="small" text-anchor="middle">prefix 1 / 288</text>
+<text x="650.00" y="322.00" class="label" text-anchor="middle">Block 身份对齐</text>
+<text x="650.00" y="344.00" class="small" text-anchor="middle">匹配前缀 1 / 288</text>
 <line x1="686.00" y1="260.00" x2="754.00" y2="260.00" stroke="#d9e2ec" stroke-width="3.00"/>
 <circle cx="790" cy="260" r="34" fill="#94a3b8"/>
 <text x="790" y="266" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
-<text x="790.00" y="322.00" class="label" text-anchor="middle">Paper benchmark</text>
-<text x="790.00" y="344.00" class="small" text-anchor="middle">pending</text>
+<text x="790.00" y="322.00" class="label" text-anchor="middle">论文级基准</text>
+<text x="790.00" y="344.00" class="small" text-anchor="middle">待做</text>
 <rect x="70.00" y="390.00" width="720.00" height="100.00" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
-<text x="92.00" y="420.00" class="label" text-anchor="start">C++ tier event-kind counts</text>
-<circle cx="96" cy="455" r="5" fill="#0f766e"/><text x="107" y="459" font-size="12" fill="#64748b">ssd_read: 2</text>
-<circle cx="246" cy="455" r="5" fill="#2563eb"/><text x="257" y="459" font-size="12" fill="#64748b">dram_to_vram: 144</text>
-<circle cx="462" cy="455" r="5" fill="#db2777"/><text x="473" y="459" font-size="12" fill="#64748b">vram_to_dram_eviction: 142</text>
+<text x="92.00" y="420.00" class="label" text-anchor="start">C++ 三层迁移事件类型计数</text>
+<circle cx="96" cy="455" r="5" fill="#0f766e"/><text x="107" y="459" font-size="12" fill="#64748b">SSD 读取: 2</text>
+<circle cx="246" cy="455" r="5" fill="#2563eb"/><text x="257" y="459" font-size="12" fill="#64748b">DRAM 到 VRAM: 144</text>
+<circle cx="462" cy="455" r="5" fill="#db2777"/><text x="473" y="459" font-size="12" fill="#64748b">VRAM 到 DRAM 驱逐: 142</text>
 </svg>

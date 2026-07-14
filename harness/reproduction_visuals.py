@@ -96,7 +96,7 @@ def svg(width: int, height: int, body: str) -> str:
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
 <rect width="{width}" height="{height}" fill="{COLORS["bg"]}"/>
 <style>
-text {{ font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+text {{ font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
 .title {{ font-size: 24px; font-weight: 700; fill: {COLORS["ink"]}; }}
 .subtitle {{ font-size: 13px; fill: {COLORS["muted"]}; }}
 .label {{ font-size: 13px; fill: {COLORS["ink"]}; }}
@@ -124,15 +124,21 @@ def line(x1: float, y1: float, x2: float, y2: float, color: str, width: float = 
 
 def short_name(name: str) -> str:
     replacements = {
-        "baseline_init_local": "baseline",
-        "representative_token_position": "rep-select",
-        "prefetch_next_view": "prefetch",
-        "representative_prefetch": "rep+prefetch",
-        "representative_sidecar": "rep-sidecar",
+        "baseline_init_local": "基线",
+        "representative_token_position": "代表选择",
+        "prefetch_next_view": "预取",
+        "representative_prefetch": "代表+预取",
+        "representative_sidecar": "侧车评分",
     }
     if name in replacements:
         return replacements[name]
-    return name.replace("dram_", "d").replace("_vram_", " v").replace("_depth_", " q").replace("_prefetch_", " p")
+    if name.startswith("dram_"):
+        parts = name.split("_")
+        if len(parts) >= 8:
+            dram_kib = int(parts[1]) // 1024
+            vram_kib = int(parts[3]) // 1024
+            return f"内{dram_kib} 显{vram_kib} 队{parts[5]} 预{parts[7]}"
+    return name
 
 
 def load_data(root: Path) -> dict[str, Any]:
@@ -165,51 +171,51 @@ def render_coverage_matrix(data: dict[str, Any]) -> str:
     has_phase5 = bool(rows)
 
     items = [
-        ("Phase 1", "KV metadata + simulation harness", "ok", "pytest-covered"),
-        ("Phase 2", "SSD queue / latency harness", "ok", "mock + probe artifacts"),
-        ("Phase 3", "llama.cpp KV trace bridge", "ok", "runtime KV traces"),
-        ("Phase 4", "live scheduler handoff", "ok", "attention gate + command bridge"),
+        ("阶段 1", "KV 元数据 + 仿真框架", "ok", "pytest 覆盖"),
+        ("阶段 2", "SSD 队列 / 延迟框架", "ok", "模拟与探测产物"),
+        ("阶段 3", "llama.cpp KV 轨迹桥接", "ok", "运行时 KV 轨迹"),
+        ("阶段 4", "实时调度器交接", "ok", "注意力门控 + 命令桥接"),
         (
-            "Phase 4",
-            "speculative prefetch timing",
+            "阶段 4",
+            "推测预取时序",
             "ok" if prefetch.get("prefetch_gap_status") == "closed" else "partial",
-            f"{prefetch.get('command_prefetch_count', 0)} commands",
+            f"{prefetch.get('command_prefetch_count', 0)} 条命令",
         ),
         (
-            "Phase 4",
-            "tier event-kind parity",
+            "阶段 4",
+            "三层迁移事件类型对齐",
             "ok" if trace.get("tier_trace_gap_status") == "closed" else "partial",
-            f"{trace.get('cxx_tier_event_count', 0)} C++ events",
+            f"{trace.get('cxx_tier_event_count', 0)} 个 C++ 事件",
         ),
         (
-            "Phase 4",
-            "tier block-identity parity",
+            "阶段 4",
+            "块身份序列对齐",
             "gap" if sequence.get("status") == "failed" else "ok",
-            sequence.get("tier_sequence_gap_status", "unknown"),
+            "需要 C++ 侧块身份对齐" if sequence.get("tier_sequence_gap_status") == "needs_cxx_tier_block_identity_parity" else sequence.get("tier_sequence_gap_status", "未知"),
         ),
         (
-            "Phase 5",
-            "ablation suite metrics",
+            "阶段 5",
+            "消融实验指标",
             "ok" if has_phase5 else "pending",
-            f"{len(rows)} rows",
+            f"{len(rows)} 行结果",
         ),
-        ("Benchmark", "paper-scale benchmark", "pending", "not started"),
+        ("基准", "论文级基准", "pending", "未开始"),
     ]
 
     col_x = [40, 150, 575, 700]
     row_h = 54
     y0 = 118
     body = [
-        text(40, 42, "SolidAttention Reproduction Coverage", "title"),
-        text(40, 66, "Harness-first status from existing project artifacts", "subtitle"),
+        text(40, 42, "SolidAttention 复现覆盖矩阵", "title"),
+        text(40, 66, "基于当前仿真产物的复现进度", "subtitle"),
         rect(30, 88, 820, 574, COLORS["card"], COLORS["grid"], 8),
-        text(col_x[0], 116, "Area", "small"),
-        text(col_x[1], 116, "Mechanism", "small"),
-        text(col_x[2], 116, "Status", "small"),
-        text(col_x[3], 116, "Evidence", "small"),
+        text(col_x[0], 116, "阶段", "small"),
+        text(col_x[1], 116, "机制", "small"),
+        text(col_x[2], 116, "状态", "small"),
+        text(col_x[3], 116, "证据", "small"),
         line(40, 128, 835, 128, COLORS["grid"], 1),
     ]
-    status_label = {"ok": "done", "partial": "partial", "gap": "gap", "pending": "pending"}
+    status_label = {"ok": "完成", "partial": "部分", "gap": "缺口", "pending": "待做"}
     for i, (phase, mechanism, status, evidence) in enumerate(items):
         y = y0 + i * row_h
         if i % 2 == 1:
@@ -222,9 +228,9 @@ def render_coverage_matrix(data: dict[str, Any]) -> str:
             f'fill="#ffffff" text-anchor="middle">{esc(status_label[status])}</text>'
         )
         body.append(text(col_x[3], y + 48, evidence, "small"))
-    body.append(tag(COLORS["ok"], "implemented", 43, 700))
-    body.append(tag(COLORS["gap"], "known reproduction gap", 155, 700))
-    body.append(tag(COLORS["pending"], "not yet reproduced", 330, 700))
+    body.append(tag(COLORS["ok"], "已实现", 43, 700))
+    body.append(tag(COLORS["gap"], "已知复现缺口", 155, 700))
+    body.append(tag(COLORS["pending"], "尚未复现", 330, 700))
     return svg(880, 740, "\n".join(body))
 
 
@@ -233,21 +239,21 @@ def render_parity_ladder(data: dict[str, Any]) -> str:
     sequence = data["sequence_parity"]
     prefetch = data["prefetch"]
     steps = [
-        ("Python scheduler", "live decisions + tier capacity", "ok"),
-        ("Command bridge", f"{prefetch.get('command_prefetch_count', 0)} prefetch commands", "ok"),
-        ("C++ runtime gate", f"queue depth {prefetch.get('runtime_executor_target_queue_depth', 0)}", "ok"),
-        ("Event-kind parity", f"{trace.get('cxx_tier_event_count', 0)} events match", "ok"),
+        ("Python 调度器", "实时决策 + 三层容量", "ok"),
+        ("命令桥接", f"{prefetch.get('command_prefetch_count', 0)} 条预取命令", "ok"),
+        ("C++ 运行时门控", f"队列深度 {prefetch.get('runtime_executor_target_queue_depth', 0)}", "ok"),
+        ("事件类型对齐", f"{trace.get('cxx_tier_event_count', 0)} 个事件匹配", "ok"),
         (
-            "Block identity parity",
-            f"prefix {sequence.get('matching_prefix_event_count', 0)} / {sequence.get('cxx_event_count', 0)}",
+            "Block 身份对齐",
+            f"匹配前缀 {sequence.get('matching_prefix_event_count', 0)} / {sequence.get('cxx_event_count', 0)}",
             "gap" if sequence.get("status") == "failed" else "ok",
         ),
-        ("Paper benchmark", "pending", "pending"),
+        ("论文级基准", "待做", "pending"),
     ]
 
     body = [
-        text(40, 42, "Python vs C++ Parity Ladder", "title"),
-        text(40, 66, "What currently matches, and where reproduction still diverges", "subtitle"),
+        text(40, 42, "Python 与 C++ 对齐阶梯", "title"),
+        text(40, 66, "展示当前已经对齐的部分，以及仍然存在的复现差距", "subtitle"),
         rect(30, 88, 820, 460, COLORS["card"], COLORS["grid"], 8),
     ]
     x0 = 90
@@ -270,12 +276,12 @@ def render_parity_ladder(data: dict[str, Any]) -> str:
     body.extend(
         [
             rect(70, 390, 720, 100, "#f8fafc", COLORS["grid"], 6),
-            text(92, 420, "C++ tier event-kind counts", "label"),
-            tag(COLORS["ssd_read"], f"ssd_read: {counts.get('ssd_read', 0)}", 96, 455),
-            tag(COLORS["dram_to_vram"], f"dram_to_vram: {counts.get('dram_to_vram', 0)}", 246, 455),
+            text(92, 420, "C++ 三层迁移事件类型计数", "label"),
+            tag(COLORS["ssd_read"], f"SSD 读取: {counts.get('ssd_read', 0)}", 96, 455),
+            tag(COLORS["dram_to_vram"], f"DRAM 到 VRAM: {counts.get('dram_to_vram', 0)}", 246, 455),
             tag(
                 COLORS["vram_to_dram_eviction"],
-                f"vram_to_dram_eviction: {counts.get('vram_to_dram_eviction', 0)}",
+                f"VRAM 到 DRAM 驱逐: {counts.get('vram_to_dram_eviction', 0)}",
                 462,
                 455,
             ),
@@ -292,14 +298,19 @@ def render_tier_timeline(data: dict[str, Any]) -> str:
         for event in events
     )
     body = [
-        text(40, 42, "Tier Movement Timeline", "title"),
-        text(40, 66, f"First {len(shown)} of {len(events)} C++ tier movement events", "subtitle"),
+        text(40, 42, "三层 KV 迁移时间线", "title"),
+        text(40, 66, f"展示前 {len(shown)} / {len(events)} 个 C++ 三层迁移事件", "subtitle"),
         rect(30, 88, 1000, 505, COLORS["card"], COLORS["grid"], 8),
     ]
     lanes = [("ssd_read", 160), ("dram_to_vram", 275), ("vram_to_dram_eviction", 390)]
+    lane_labels = {
+        "ssd_read": "SSD 读取",
+        "dram_to_vram": "DRAM 到 VRAM",
+        "vram_to_dram_eviction": "VRAM 到 DRAM 驱逐",
+    }
     for kind, y in lanes:
         body.append(line(90, y, 960, y, COLORS["grid"], 1))
-        body.append(text(42, y + 4, kind, "small"))
+        body.append(text(42, y + 4, lane_labels[kind], "small"))
     if shown:
         max_idx = max(1, len(shown) - 1)
         lane_by_kind = {kind: y for kind, y in lanes}
@@ -314,7 +325,7 @@ def render_tier_timeline(data: dict[str, Any]) -> str:
             view = meta.get("view", "?")
             body.append(
                 f'<circle cx="{x:.2f}" cy="{y:.2f}" r="3.5" fill="{color}">'
-                f"<title>event {i + 1}: {esc(kind)} layer={esc(layer)} block={esc(block)} view={esc(view)}</title>"
+                f"<title>事件 {i + 1}: {esc(lane_labels.get(kind, kind))} 层={esc(layer)} 块={esc(block)} 视图={esc(view)}</title>"
                 "</circle>"
             )
     body.append(line(95, 475, 950, 475, COLORS["grid"], 1))
@@ -324,10 +335,10 @@ def render_tier_timeline(data: dict[str, Any]) -> str:
         body.append(text(x, 500, t, "small", "middle"))
     body.extend(
         [
-            text(95, 535, f"ssd_read: {counts.get('ssd_read', 0)}", "small"),
-            text(240, 535, f"dram_to_vram: {counts.get('dram_to_vram', 0)}", "small"),
-            text(430, 535, f"evictions: {counts.get('vram_to_dram_eviction', 0)}", "small"),
-            text(720, 535, "Note: timeline shows event-kind parity, not block identity parity.", "small"),
+            text(95, 535, f"SSD 读取: {counts.get('ssd_read', 0)}", "small"),
+            text(240, 535, f"DRAM 到 VRAM: {counts.get('dram_to_vram', 0)}", "small"),
+            text(430, 535, f"驱逐: {counts.get('vram_to_dram_eviction', 0)}", "small"),
+            text(720, 535, "说明：时间线展示事件类型对齐，不代表块身份序列已完全对齐。", "small"),
         ]
     )
     return svg(1060, 630, "\n".join(body))
@@ -378,8 +389,8 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
     tier = sorted(tier, key=lambda row: (as_int(row, "vram_capacity_bytes"), as_int(row, "dram_capacity_bytes")))
 
     body = [
-        text(40, 42, "Ablation Metrics Snapshot", "title"),
-        text(40, 66, "Latency, blocking decisions, and tier evictions from Phase 5 artifacts", "subtitle"),
+        text(40, 42, "消融实验指标快照", "title"),
+        text(40, 66, "来自第 5 阶段产物的延迟、阻塞决策和三层驱逐统计", "subtitle"),
         rect(30, 88, 1020, 600, COLORS["card"], COLORS["grid"], 8),
     ]
     body.extend(
@@ -391,7 +402,7 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
             250,
             "total_estimated_latency_ms",
             COLORS["latency"],
-            "Single scheduler latency",
+            "单次调度延迟",
             "ms",
         )
     )
@@ -404,7 +415,7 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
             210,
             "blocking_decision_count",
             COLORS["partial"],
-            "Blocking decisions",
+            "阻塞决策数",
             "",
         )
     )
@@ -417,7 +428,7 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
             250,
             "total_estimated_latency_ms",
             COLORS["latency"],
-            "Tier capacity latency",
+            "三层容量延迟",
             "ms",
         )
     )
@@ -430,7 +441,7 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
             210,
             "tier_eviction_count",
             COLORS["eviction"],
-            "Tier evictions",
+            "三层驱逐次数",
             "",
         )
     )
@@ -438,19 +449,25 @@ def render_ablation_bars(data: dict[str, Any]) -> str:
 
 
 def render_dashboard(output_names: list[str]) -> str:
+    titles = {
+        "01_reproduction_coverage_matrix.svg": "复现覆盖矩阵",
+        "02_python_cpp_parity_ladder.svg": "Python 与 C++ 对齐阶梯",
+        "03_tier_movement_timeline.svg": "三层 KV 迁移时间线",
+        "04_ablation_latency_eviction.svg": "消融延迟与驱逐统计",
+    }
     cards = "\n".join(
-        f'<section><h2>{esc(name[3:-4].replace("_", " ").title())}</h2>'
-        f'<img src="{esc(name)}" alt="{esc(name)}"/></section>'
+        f'<section><h2>{esc(titles.get(name, name))}</h2>'
+        f'<img src="{esc(name)}" alt="{esc(titles.get(name, name))}"/></section>'
         for name in output_names
     )
     return f"""<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>SolidAttention Reproduction Status</title>
+<title>SolidAttention 复现状态</title>
 <style>
-body {{ margin: 0; background: #e5e7eb; color: #111827; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }}
+body {{ margin: 0; background: #e5e7eb; color: #111827; font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }}
 main {{ max-width: 1180px; margin: 0 auto; padding: 32px 20px; }}
 h1 {{ margin: 0 0 8px; font-size: 30px; }}
 p {{ color: #475569; margin: 0 0 24px; }}
@@ -461,8 +478,8 @@ img {{ width: 100%; height: auto; display: block; }}
 </head>
 <body>
 <main>
-<h1>SolidAttention Reproduction Status</h1>
-<p>Static figures generated from harness trace, parity verification, and ablation metrics artifacts.</p>
+<h1>SolidAttention 复现状态</h1>
+<p>这些静态图由仿真框架轨迹、对齐验证结果和消融实验指标生成。</p>
 {cards}
 </main>
 </body>

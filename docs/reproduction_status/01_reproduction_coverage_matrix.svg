@@ -1,70 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="880" height="740" viewBox="0 0 880 740">
 <rect width="880" height="740" fill="#f8fafc"/>
 <style>
-text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+text { font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .title { font-size: 24px; font-weight: 700; fill: #111827; }
 .subtitle { font-size: 13px; fill: #64748b; }
 .label { font-size: 13px; fill: #111827; }
 .small { font-size: 11px; fill: #64748b; }
 </style>
-<text x="40.00" y="42.00" class="title" text-anchor="start">SolidAttention Reproduction Coverage</text>
-<text x="40.00" y="66.00" class="subtitle" text-anchor="start">Harness-first status from existing project artifacts</text>
+<text x="40.00" y="42.00" class="title" text-anchor="start">SolidAttention 复现覆盖矩阵</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">基于当前仿真产物的复现进度</text>
 <rect x="30.00" y="88.00" width="820.00" height="574.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
-<text x="40.00" y="116.00" class="small" text-anchor="start">Area</text>
-<text x="150.00" y="116.00" class="small" text-anchor="start">Mechanism</text>
-<text x="575.00" y="116.00" class="small" text-anchor="start">Status</text>
-<text x="700.00" y="116.00" class="small" text-anchor="start">Evidence</text>
+<text x="40.00" y="116.00" class="small" text-anchor="start">阶段</text>
+<text x="150.00" y="116.00" class="small" text-anchor="start">机制</text>
+<text x="575.00" y="116.00" class="small" text-anchor="start">状态</text>
+<text x="700.00" y="116.00" class="small" text-anchor="start">证据</text>
 <line x1="40.00" y1="128.00" x2="835.00" y2="128.00" stroke="#d9e2ec" stroke-width="1.00"/>
-<text x="40.00" y="166.00" class="label" text-anchor="start">Phase 1</text>
-<text x="150.00" y="166.00" class="label" text-anchor="start">KV metadata + simulation harness</text>
+<text x="40.00" y="166.00" class="label" text-anchor="start">阶段 1</text>
+<text x="150.00" y="166.00" class="label" text-anchor="start">KV 元数据 + 仿真框架</text>
 <rect x="575.00" y="147.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="164" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="166.00" class="small" text-anchor="start">pytest-covered</text>
+<text x="618" y="164" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="166.00" class="small" text-anchor="start">pytest 覆盖</text>
 <rect x="40.00" y="190.00" width="795.00" height="46.00" rx="4" fill="#f1f5f9" stroke="none"/>
-<text x="40.00" y="220.00" class="label" text-anchor="start">Phase 2</text>
-<text x="150.00" y="220.00" class="label" text-anchor="start">SSD queue / latency harness</text>
+<text x="40.00" y="220.00" class="label" text-anchor="start">阶段 2</text>
+<text x="150.00" y="220.00" class="label" text-anchor="start">SSD 队列 / 延迟框架</text>
 <rect x="575.00" y="201.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="218" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="220.00" class="small" text-anchor="start">mock + probe artifacts</text>
-<text x="40.00" y="274.00" class="label" text-anchor="start">Phase 3</text>
-<text x="150.00" y="274.00" class="label" text-anchor="start">llama.cpp KV trace bridge</text>
+<text x="618" y="218" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="220.00" class="small" text-anchor="start">模拟与探测产物</text>
+<text x="40.00" y="274.00" class="label" text-anchor="start">阶段 3</text>
+<text x="150.00" y="274.00" class="label" text-anchor="start">llama.cpp KV 轨迹桥接</text>
 <rect x="575.00" y="255.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="272" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="274.00" class="small" text-anchor="start">runtime KV traces</text>
+<text x="618" y="272" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="274.00" class="small" text-anchor="start">运行时 KV 轨迹</text>
 <rect x="40.00" y="298.00" width="795.00" height="46.00" rx="4" fill="#f1f5f9" stroke="none"/>
-<text x="40.00" y="328.00" class="label" text-anchor="start">Phase 4</text>
-<text x="150.00" y="328.00" class="label" text-anchor="start">live scheduler handoff</text>
+<text x="40.00" y="328.00" class="label" text-anchor="start">阶段 4</text>
+<text x="150.00" y="328.00" class="label" text-anchor="start">实时调度器交接</text>
 <rect x="575.00" y="309.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="326" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="328.00" class="small" text-anchor="start">attention gate + command bridge</text>
-<text x="40.00" y="382.00" class="label" text-anchor="start">Phase 4</text>
-<text x="150.00" y="382.00" class="label" text-anchor="start">speculative prefetch timing</text>
+<text x="618" y="326" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="328.00" class="small" text-anchor="start">注意力门控 + 命令桥接</text>
+<text x="40.00" y="382.00" class="label" text-anchor="start">阶段 4</text>
+<text x="150.00" y="382.00" class="label" text-anchor="start">推测预取时序</text>
 <rect x="575.00" y="363.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="380" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="382.00" class="small" text-anchor="start">2 commands</text>
+<text x="618" y="380" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="382.00" class="small" text-anchor="start">2 条命令</text>
 <rect x="40.00" y="406.00" width="795.00" height="46.00" rx="4" fill="#f1f5f9" stroke="none"/>
-<text x="40.00" y="436.00" class="label" text-anchor="start">Phase 4</text>
-<text x="150.00" y="436.00" class="label" text-anchor="start">tier event-kind parity</text>
+<text x="40.00" y="436.00" class="label" text-anchor="start">阶段 4</text>
+<text x="150.00" y="436.00" class="label" text-anchor="start">三层迁移事件类型对齐</text>
 <rect x="575.00" y="417.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="434" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="436.00" class="small" text-anchor="start">288 C++ events</text>
-<text x="40.00" y="490.00" class="label" text-anchor="start">Phase 4</text>
-<text x="150.00" y="490.00" class="label" text-anchor="start">tier block-identity parity</text>
+<text x="618" y="434" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="436.00" class="small" text-anchor="start">288 个 C++ 事件</text>
+<text x="40.00" y="490.00" class="label" text-anchor="start">阶段 4</text>
+<text x="150.00" y="490.00" class="label" text-anchor="start">块身份序列对齐</text>
 <rect x="575.00" y="471.00" width="86.00" height="24.00" rx="12" fill="#dc2626" stroke="none"/>
-<text x="618" y="488" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">gap</text>
-<text x="700.00" y="490.00" class="small" text-anchor="start">needs_cxx_tier_block_identity_parity</text>
+<text x="618" y="488" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">缺口</text>
+<text x="700.00" y="490.00" class="small" text-anchor="start">需要 C++ 侧块身份对齐</text>
 <rect x="40.00" y="514.00" width="795.00" height="46.00" rx="4" fill="#f1f5f9" stroke="none"/>
-<text x="40.00" y="544.00" class="label" text-anchor="start">Phase 5</text>
-<text x="150.00" y="544.00" class="label" text-anchor="start">ablation suite metrics</text>
+<text x="40.00" y="544.00" class="label" text-anchor="start">阶段 5</text>
+<text x="150.00" y="544.00" class="label" text-anchor="start">消融实验指标</text>
 <rect x="575.00" y="525.00" width="86.00" height="24.00" rx="12" fill="#16a34a" stroke="none"/>
-<text x="618" y="542" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">done</text>
-<text x="700.00" y="544.00" class="small" text-anchor="start">27 rows</text>
-<text x="40.00" y="598.00" class="label" text-anchor="start">Benchmark</text>
-<text x="150.00" y="598.00" class="label" text-anchor="start">paper-scale benchmark</text>
+<text x="618" y="542" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">完成</text>
+<text x="700.00" y="544.00" class="small" text-anchor="start">27 行结果</text>
+<text x="40.00" y="598.00" class="label" text-anchor="start">基准</text>
+<text x="150.00" y="598.00" class="label" text-anchor="start">论文级基准</text>
 <rect x="575.00" y="579.00" width="86.00" height="24.00" rx="12" fill="#94a3b8" stroke="none"/>
-<text x="618" y="596" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">pending</text>
-<text x="700.00" y="598.00" class="small" text-anchor="start">not started</text>
-<circle cx="43" cy="700" r="5" fill="#16a34a"/><text x="54" y="704" font-size="12" fill="#64748b">implemented</text>
-<circle cx="155" cy="700" r="5" fill="#dc2626"/><text x="166" y="704" font-size="12" fill="#64748b">known reproduction gap</text>
-<circle cx="330" cy="700" r="5" fill="#94a3b8"/><text x="341" y="704" font-size="12" fill="#64748b">not yet reproduced</text>
+<text x="618" y="596" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">待做</text>
+<text x="700.00" y="598.00" class="small" text-anchor="start">未开始</text>
+<circle cx="43" cy="700" r="5" fill="#16a34a"/><text x="54" y="704" font-size="12" fill="#64748b">已实现</text>
+<circle cx="155" cy="700" r="5" fill="#dc2626"/><text x="166" y="704" font-size="12" fill="#64748b">已知复现缺口</text>
+<circle cx="330" cy="700" r="5" fill="#94a3b8"/><text x="341" y="704" font-size="12" fill="#64748b">尚未复现</text>
 </svg>
