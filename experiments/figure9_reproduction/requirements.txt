@@ -1,0 +1,8 @@
+matplotlib
+numpy
+# Required by the real model/data runner, not by compute_similarity.py itself:
+torch
+transformers
+datasets
+sentencepiece
+accelerate

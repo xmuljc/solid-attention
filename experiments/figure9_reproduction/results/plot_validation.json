@@ -1,0 +1,14 @@
+{
+  "status": "ok",
+  "workload_count": 8,
+  "model_count": 1,
+  "bar_count": 8,
+  "y_axis_expected": [
+    0,
+    25,
+    50,
+    75,
+    100
+  ],
+  "note": "Programmatic image-object overlap inspection requires a rendering backend; CSV/range/file checks passed."
+}

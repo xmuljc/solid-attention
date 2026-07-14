@@ -1,0 +1,89 @@
+{
+  "contract": "solidattention.figure9_reproduction.manifest.v1",
+  "status": "qwen_smoke_completed",
+  "created_at_utc": "2026-07-14",
+  "reason": "Qwen-2.5-7B real selected-block trace smoke completed. Llama-3.1-8B remains missing, so no Llama bars were generated.",
+  "models": [
+    {
+      "name": "Llama-3.1-8B",
+      "checkpoint": null,
+      "revision": null,
+      "quantization": null,
+      "tokenizer": null,
+      "status": "missing"
+    },
+    {
+      "name": "Qwen-2.5-7B",
+      "checkpoint": ".deps/models/Qwen2.5-7B",
+      "revision": null,
+      "quantization": "none; loaded as torch.float16",
+      "tokenizer": "Qwen2Tokenizer",
+      "status": "available"
+    }
+  ],
+  "datasets": [
+    "gov_report",
+    "multifieldqa_en",
+    "musique",
+    "narrativeqa",
+    "qmsum",
+    "multi_news",
+    "repobench-p",
+    "ruler_multikey_alternating"
+  ],
+  "required_settings": {
+    "batch_size": 1,
+    "decoding": "greedy",
+    "temperature": 0,
+    "kv_dtype": "FP16",
+    "block_size_tokens": 32,
+    "context_budget_tokens": 1024,
+    "selected_budget_tokens": 512,
+    "dynamic_top_k_blocks": 16,
+    "smoke_samples_per_model_dataset": 3,
+    "main_samples_per_model_dataset": 20,
+    "smoke_max_new_tokens": 32,
+    "main_max_new_tokens": 128
+  },
+  "exclusions": [],
+  "completed_outputs": {
+    "trace": "experiments/figure9_reproduction/results/selected_blocks_trace.jsonl",
+    "raw_transitions": "experiments/figure9_reproduction/results/similarity_raw.jsonl",
+    "summary_csv": "experiments/figure9_reproduction/results/similarity_summary.csv",
+    "values_csv": "experiments/figure9_reproduction/results/selection_similarity_values.csv",
+    "extended_png": "experiments/figure9_reproduction/results/selection_similarity_extended.png",
+    "extended_pdf": "experiments/figure9_reproduction/results/selection_similarity_extended.pdf",
+    "extended_with_ci_png": "experiments/figure9_reproduction/results/selection_similarity_extended_with_ci.png",
+    "extended_with_ci_pdf": "experiments/figure9_reproduction/results/selection_similarity_extended_with_ci.pdf",
+    "anchor_png": "experiments/figure9_reproduction/results/figure9_anchor_reproduction.png",
+    "anchor_pdf": "experiments/figure9_reproduction/results/figure9_anchor_reproduction.pdf",
+    "run_manifest": "experiments/figure9_reproduction/results/qwen_selected_blocks_run_manifest.json",
+    "plot_validation": "experiments/figure9_reproduction/results/plot_validation.json"
+  },
+  "actual_run_settings": {
+    "models": [
+      "Qwen-2.5-7B"
+    ],
+    "samples_per_dataset": 3,
+    "datasets": [
+      "gov_report",
+      "multifieldqa_en",
+      "musique",
+      "narrativeqa",
+      "qmsum",
+      "multi_news",
+      "repobench-p",
+      "ruler_multikey_alternating"
+    ],
+    "max_new_tokens": 32,
+    "context_budget_tokens": 1024,
+    "block_size_tokens": 32,
+    "dynamic_top_k_blocks": 16,
+    "recorded_layers": 28,
+    "recorded_query_heads": 28,
+    "trace_records": 602112,
+    "valid_transitions": 583296,
+    "failures": 0,
+    "note": "Uniform 3-sample smoke scale; not the original 20-sample-per-model main experiment."
+  }
+}
