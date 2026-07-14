@@ -1,0 +1,13 @@
+{
+  "note": "Generated without third-party plotting dependencies. Do not use as formal result.",
+  "outputs": [
+    "barrier_vs_progressive_hit_rate_smoke.png",
+    "barrier_vs_progressive_hit_rate_smoke.pdf",
+    "speedup_heatmap_81pct_smoke.png",
+    "speedup_heatmap_81pct_smoke.pdf",
+    "latency_breakdown_81pct_smoke.png",
+    "latency_breakdown_81pct_smoke.pdf"
+  ],
+  "status": "ok",
+  "type": "smoke_plots_only"
+}

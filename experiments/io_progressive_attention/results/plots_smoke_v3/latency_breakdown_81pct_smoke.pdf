@@ -1,0 +1,50 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 900 620] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1280 >>
+stream
+0.1216 0.4667 0.7059 rg 160.00 100.00 80.00 5.00 re f
+1.0000 0.4980 0.0549 rg 160.00 105.00 80.00 0.00 re f
+0.1725 0.6275 0.1725 rg 160.00 105.00 80.00 389.00 re f
+0.0000 0.0000 0.0000 RG 160.00 100.00 80.00 420.00 re S
+BT 0.0000 0.0000 0.0000 rg /F1 12 Tf 172.00 72.00 Td (B3) Tj ET
+0.1216 0.4667 0.7059 rg 330.00 100.00 80.00 6.00 re f
+1.0000 0.4980 0.0549 rg 330.00 106.00 80.00 0.00 re f
+0.1725 0.6275 0.1725 rg 330.00 106.00 80.00 410.00 re f
+0.0000 0.0000 0.0000 RG 330.00 100.00 80.00 420.00 re S
+BT 0.0000 0.0000 0.0000 rg /F1 12 Tf 342.00 72.00 Td (B4) Tj ET
+0.1216 0.4667 0.7059 rg 500.00 100.00 80.00 5.00 re f
+1.0000 0.4980 0.0549 rg 500.00 105.00 80.00 0.00 re f
+0.1725 0.6275 0.1725 rg 500.00 105.00 80.00 409.00 re f
+0.0000 0.0000 0.0000 RG 500.00 100.00 80.00 420.00 re S
+BT 0.0000 0.0000 0.0000 rg /F1 12 Tf 512.00 72.00 Td (B5) Tj ET
+BT 0.0000 0.0000 0.0000 rg /F1 14 Tf 250.00 580.00 Td (Smoke 81.25% Latency Breakdown) Tj ET
+BT 0.0000 0.0000 0.0000 rg /F1 10 Tf 20.00 540.00 Td (Stacked components are diagnostic, not final overlap accounting.) Tj ET
+BT 0.1216 0.4667 0.7059 rg /F1 10 Tf 650.00 490.00 Td (SSD) Tj ET
+BT 1.0000 0.4980 0.0549 rg /F1 10 Tf 650.00 470.00 Td (H2D) Tj ET
+BT 0.1725 0.6275 0.1725 rg /F1 10 Tf 650.00 450.00 Td (Attention/Merge) Tj ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000139 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer << /Size 6 /Root 1 0 R >>
+startxref
+1643
+%%EOF
