@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="725" viewBox="0 0 1080 725">
+<rect width="1080" height="725" fill="#f8fafc"/>
+<style>
+text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.title { font-size: 24px; font-weight: 700; fill: #111827; }
+.subtitle { font-size: 13px; fill: #64748b; }
+.label { font-size: 13px; fill: #111827; }
+.small { font-size: 11px; fill: #64748b; }
+</style>
+<text x="40.00" y="42.00" class="title" text-anchor="start">Ablation Metrics Snapshot</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">Latency, blocking decisions, and tier evictions from Phase 5 artifacts</text>
+<rect x="30.00" y="88.00" width="1020.00" height="600.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
+<text x="55.00" y="125.00" class="label" text-anchor="start">Single scheduler latency</text>
+<text x="55.00" y="173.00" class="small" text-anchor="start">baseline</text>
+<rect x="175.00" y="157.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="157.00" width="275.00" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="458.00" y="173.00" class="small" text-anchor="start">1.079 ms</text>
+<text x="55.00" y="207.00" class="small" text-anchor="start">rep-select</text>
+<rect x="175.00" y="191.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="191.00" width="275.00" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="458.00" y="207.00" class="small" text-anchor="start">1.079 ms</text>
+<text x="55.00" y="241.00" class="small" text-anchor="start">prefetch</text>
+<rect x="175.00" y="225.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="225.00" width="254.87" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="437.87" y="241.00" class="small" text-anchor="start">1.000 ms</text>
+<text x="55.00" y="275.00" class="small" text-anchor="start">rep+prefetch</text>
+<rect x="175.00" y="259.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="259.00" width="254.87" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="437.87" y="275.00" class="small" text-anchor="start">1.000 ms</text>
+<text x="55.00" y="309.00" class="small" text-anchor="start">rep-sidecar</text>
+<rect x="175.00" y="293.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="293.00" width="275.00" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="458.00" y="309.00" class="small" text-anchor="start">1.079 ms</text>
+<text x="55.00" y="390.00" class="label" text-anchor="start">Blocking decisions</text>
+<text x="55.00" y="438.00" class="small" text-anchor="start">baseline</text>
+<rect x="175.00" y="422.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="422.00" width="275.00" height="22.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="458.00" y="438.00" class="small" text-anchor="start">6</text>
+<text x="55.00" y="472.00" class="small" text-anchor="start">rep-select</text>
+<rect x="175.00" y="456.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="456.00" width="275.00" height="22.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="458.00" y="472.00" class="small" text-anchor="start">6</text>
+<text x="55.00" y="506.00" class="small" text-anchor="start">prefetch</text>
+<rect x="175.00" y="490.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="490.00" width="183.33" height="22.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="366.33" y="506.00" class="small" text-anchor="start">4</text>
+<text x="55.00" y="540.00" class="small" text-anchor="start">rep+prefetch</text>
+<rect x="175.00" y="524.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="524.00" width="183.33" height="22.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="366.33" y="540.00" class="small" text-anchor="start">4</text>
+<text x="55.00" y="574.00" class="small" text-anchor="start">rep-sidecar</text>
+<rect x="175.00" y="558.00" width="275.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="175.00" y="558.00" width="275.00" height="22.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="458.00" y="574.00" class="small" text-anchor="start">6</text>
+<text x="560.00" y="125.00" class="label" text-anchor="start">Tier capacity latency</text>
+<text x="560.00" y="173.00" class="small" text-anchor="start">d196608 v131072 q1 p0</text>
+<rect x="680.00" y="157.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="157.00" width="255.00" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="943.00" y="173.00" class="small" text-anchor="start">71.579 ms</text>
+<text x="560.00" y="207.00" class="small" text-anchor="start">d262144 v131072 q1 p0</text>
+<rect x="680.00" y="191.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="191.00" width="255.00" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="943.00" y="207.00" class="small" text-anchor="start">71.579 ms</text>
+<text x="560.00" y="241.00" class="small" text-anchor="start">d196608 v196608 q1 p0</text>
+<rect x="680.00" y="225.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="225.00" width="129.42" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="817.42" y="241.00" class="small" text-anchor="start">36.329 ms</text>
+<text x="560.00" y="275.00" class="small" text-anchor="start">d262144 v196608 q1 p0</text>
+<rect x="680.00" y="259.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="259.00" width="129.42" height="22.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="817.42" y="275.00" class="small" text-anchor="start">36.329 ms</text>
+<text x="560.00" y="390.00" class="label" text-anchor="start">Tier evictions</text>
+<text x="560.00" y="438.00" class="small" text-anchor="start">d196608 v131072 q1 p0</text>
+<rect x="680.00" y="422.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="422.00" width="255.00" height="22.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="943.00" y="438.00" class="small" text-anchor="start">142</text>
+<text x="560.00" y="472.00" class="small" text-anchor="start">d262144 v131072 q1 p0</text>
+<rect x="680.00" y="456.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="456.00" width="255.00" height="22.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="943.00" y="472.00" class="small" text-anchor="start">142</text>
+<text x="560.00" y="506.00" class="small" text-anchor="start">d196608 v196608 q1 p0</text>
+<rect x="680.00" y="490.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="490.00" width="127.50" height="22.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="815.50" y="506.00" class="small" text-anchor="start">71</text>
+<text x="560.00" y="540.00" class="small" text-anchor="start">d262144 v196608 q1 p0</text>
+<rect x="680.00" y="524.00" width="255.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/>
+<rect x="680.00" y="524.00" width="127.50" height="22.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="815.50" y="540.00" class="small" text-anchor="start">71</text>
+</svg>

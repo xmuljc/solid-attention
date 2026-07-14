@@ -1,0 +1,24 @@
+{
+  "contract": "solidattention.reproduction_visuals.v1",
+  "figures": [
+    "01_reproduction_coverage_matrix.svg",
+    "02_python_cpp_parity_ladder.svg",
+    "03_tier_movement_timeline.svg",
+    "04_ablation_latency_eviction.svg"
+  ],
+  "headline_metrics": {
+    "ablation_row_count": 27,
+    "cxx_tier_event_count": 288,
+    "prefetch_gap_status": "closed",
+    "tier_sequence_gap_status": "needs_cxx_tier_block_identity_parity",
+    "tier_trace_gap_status": "closed"
+  },
+  "source_artifacts": {
+    "ablation_csv": "outputs/phase5/live_attention_ablation_suite/live_attention_ablation_table.csv",
+    "prefetch_timing": "outputs/phase4/attention_prefetch_timing/attention_prefetch_timing_verification.json",
+    "tier_sequence_parity": "outputs/phase4/tier_policy_handoff/tier_sequence_parity_verification.json",
+    "tier_trace_parity": "outputs/phase4/tier_policy_handoff/tier_trace_parity_verification.json",
+    "trace": "outputs/phase4/tier_policy_handoff/llama_attention_tier_event_kind_parity/runtime_kv_attention_tier_trace.jsonl"
+  },
+  "status": "ok"
+}
