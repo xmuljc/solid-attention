@@ -1,0 +1,5 @@
+policy,label,mean_useful_on_time_bytes,mean_late_useful_bytes,mean_wrong_nvme_bytes,mean_correction_bytes
+Random-Same-Volume,随机等量,517961.9555555555,0.0,530614.0444444445,473588.6222222222
+History-Last1,上一 step,831488.0,0.0,159698.48888888888,160062.57777777777
+Past-Frequency,过去频率,857634.1333333333,0.0,190941.86666666667,133916.44444444444
+Oracle,Oracle,991550.5777777778,0.0,0.0,0.0

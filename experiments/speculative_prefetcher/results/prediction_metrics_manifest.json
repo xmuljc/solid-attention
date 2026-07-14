@@ -1,0 +1,18 @@
+{
+  "block_bytes": 65536,
+  "candidate_count": 32,
+  "cold_start_events": 18816,
+  "contract": "solidattention.speculative_prefetcher.offline_metrics.v1",
+  "event_rows": 2916480,
+  "legal_dynamic_candidates": 30,
+  "outputs": [
+    "prediction_event_metrics.csv",
+    "prediction_prompt_metrics.csv",
+    "prediction_metrics.csv",
+    "prediction_paired_differences.csv",
+    "cold_start_events.csv"
+  ],
+  "selected_k": 16,
+  "status": "ok",
+  "trace": "/data/disk2/ljc/solid attention/experiments/figure9_reproduction/results/selected_blocks_trace.jsonl"
+}

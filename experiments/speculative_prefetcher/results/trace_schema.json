@@ -1,0 +1,17 @@
+{
+  "keys": [
+    "dataset",
+    "decode_step",
+    "generated_tokens_seen",
+    "head_id",
+    "init_blocks",
+    "layer_id",
+    "local_blocks",
+    "model",
+    "prompt_tokens",
+    "sample_id",
+    "selected_blocks",
+    "source_id"
+  ],
+  "selection_unit": "head_id"
+}

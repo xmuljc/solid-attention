@@ -1,0 +1,8 @@
+{
+  "contract": "solidattention.speculative_prefetcher.replay_events.v1",
+  "mode": "smoke",
+  "note": "Controlled rows use candidate_count=128 so 0% overlap is feasible; workload rows use real Qwen selected-block trace.",
+  "output": "/data/disk2/ljc/solid attention/experiments/speculative_prefetcher/results/replay_events_smoke.csv",
+  "rows": 4600,
+  "status": "ok"
+}

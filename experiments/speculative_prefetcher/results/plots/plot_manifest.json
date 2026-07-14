@@ -1,0 +1,26 @@
+{
+  "contract": "solidattention.speculative_prefetcher.plots.v1",
+  "font": "experiments/io_progressive_attention/assets/fonts/NotoSansCJKsc-Regular.otf",
+  "note": "Chinese PNG/PDF plots generated from smoke CSV/JSONL. Not a formal 1000-trial paper-level run.",
+  "outputs": [
+    "blocking_latency_cdf.csv",
+    "blocking_latency_cdf.pdf",
+    "blocking_latency_cdf.png",
+    "hit_rate_vs_latency_saving.csv",
+    "hit_rate_vs_latency_saving.pdf",
+    "hit_rate_vs_latency_saving.png",
+    "lead_time_hit_rate_speedup_heatmap.csv",
+    "lead_time_hit_rate_speedup_heatmap.pdf",
+    "lead_time_hit_rate_speedup_heatmap.png",
+    "prefetch_policy_blocking_latency.csv",
+    "prefetch_policy_blocking_latency.pdf",
+    "prefetch_policy_blocking_latency.png",
+    "selection_locality_by_workload.csv",
+    "selection_locality_by_workload.pdf",
+    "selection_locality_by_workload.png",
+    "useful_late_wasted_missing_bytes.csv",
+    "useful_late_wasted_missing_bytes.pdf",
+    "useful_late_wasted_missing_bytes.png"
+  ],
+  "status": "ok"
+}

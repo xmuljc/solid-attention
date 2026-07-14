@@ -1,0 +1,185 @@
+{
+  "contract": "solidattention.speculative_prefetcher.audit.v1",
+  "status": "ok",
+  "qwen_shape": {
+    "model_type": "qwen2",
+    "num_hidden_layers": 28,
+    "num_attention_heads": 28,
+    "num_key_value_heads": 4,
+    "hidden_size": 3584,
+    "head_dim": 128,
+    "torch_dtype": "bfloat16",
+    "load_kv_dtype": "float16",
+    "block_tokens": 32,
+    "dtype_bytes": 2,
+    "block_bytes": 65536
+  },
+  "trace": {
+    "path": "/data/disk2/ljc/solid attention/experiments/figure9_reproduction/results/selected_blocks_trace.jsonl",
+    "keys": [
+      "dataset",
+      "decode_step",
+      "generated_tokens_seen",
+      "head_id",
+      "init_blocks",
+      "layer_id",
+      "local_blocks",
+      "model",
+      "prompt_tokens",
+      "sample_id",
+      "selected_blocks",
+      "source_id"
+    ],
+    "event_count": 602112,
+    "workloads": {
+      "gov_report": 75264,
+      "multifieldqa_en": 75264,
+      "musique": 75264,
+      "narrativeqa": 75264,
+      "qmsum": 75264,
+      "multi_news": 75264,
+      "repobench-p": 75264,
+      "ruler_multikey_alternating": 75264
+    },
+    "prompt_counts": {
+      "gov_report": 3,
+      "multifieldqa_en": 3,
+      "musique": 3,
+      "narrativeqa": 3,
+      "qmsum": 3,
+      "multi_news": 3,
+      "repobench-p": 3,
+      "ruler_multikey_alternating": 3
+    },
+    "decode_step_min": 0,
+    "decode_step_max": 31,
+    "decode_step_count": 32,
+    "layer_min": 0,
+    "layer_max": 27,
+    "layer_count": 28,
+    "head_min": 0,
+    "head_max": 27,
+    "head_count": 28,
+    "selected_lengths": {
+      "16": 602112
+    },
+    "selected_events_containing_init_or_local": 528320,
+    "available_workloads_note": "Available trace covers previous Figure 9 smoke workloads, not the newly requested Qasper/2WikiMQA/TriviaQA/HotpotQA set."
+  },
+  "trace_manifest": {
+    "model": "Qwen-2.5-7B",
+    "model_dir": ".deps/models/Qwen2.5-7B",
+    "load_dtype": "float16",
+    "kv_trace_dtype": "float16_projection_to_float32_representative",
+    "datasets": [
+      "gov_report",
+      "multifieldqa_en",
+      "musique",
+      "narrativeqa",
+      "qmsum",
+      "multi_news",
+      "repobench-p",
+      "ruler_multikey_alternating"
+    ],
+    "samples_per_dataset": 3,
+    "max_new_tokens": 32,
+    "context_budget": 1024,
+    "block_size": 32,
+    "top_k": 16,
+    "recorded_layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "recorded_heads": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ]
+  },
+  "kv_test_file": {
+    "path": "/data/disk2/ljc/solid attention/experiments/io_progressive_attention/data/qwen_kv_finite_2g.bin",
+    "size_bytes": 2147483648,
+    "allocated_bytes": 2147487744,
+    "appears_sparse": false
+  },
+  "device_checks": {
+    "findmnt": {
+      "cmd": [
+        "findmnt",
+        "-T",
+        "/data/disk2/ljc/solid attention/experiments/io_progressive_attention/data/qwen_kv_finite_2g.bin"
+      ],
+      "returncode": 0,
+      "output": "TARGET      SOURCE       FSTYPE OPTIONS\n/data/disk2 /dev/nvme1n1 ext4   rw,relatime\n"
+    },
+    "lsblk": {
+      "cmd": [
+        "lsblk",
+        "-o",
+        "NAME,TYPE,SIZE,MOUNTPOINT,FSTYPE,MODEL"
+      ],
+      "returncode": 0,
+      "output": "NAME    TYPE   SIZE MOUNTPOINT        FSTYPE   MODEL\nloop0   loop  66.8M /snap/core24/1643 squashfs \nloop1   loop  49.3M /snap/snapd/26865 squashfs \nloop2   loop  50.1M /snap/snapd/27406 squashfs \nsda     disk 446.6G                            MR9560-8i\n├─sda1  part   256M /boot/efi         vfat     \n├─sda2  part     1G                   xfs      \n├─sda3  part    10G                   vfat     \n└─sda4  part 435.4G /                 ext4     \nnvme2n1 disk   1.9T /data/disk3       ext4     ZHITAI TiPlus7100 2TB\nnvme1n1 disk   1.9T /data/disk2       ext4     ZHITAI TiPlus7100 2TB\nnvme0n1 disk   1.9T /home/cyf/ssd     ext4     ZHITAI TiPlus7100 2TB\n"
+    },
+    "nvme_list": {
+      "cmd": [
+        "nvme",
+        "list"
+      ],
+      "returncode": 127,
+      "output": "[Errno 2] No such file or directory: 'nvme'",
+      "status": "unavailable"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "contract": "solidattention.speculative_prefetcher.replay_analysis.v1",
+  "correlation": {
+    "on_time_recall_vs_latency_saving": 0.917251730542542,
+    "semantic_recall_vs_latency_saving": 0.917251730542542
+  },
+  "outputs": [
+    "policy_latency_summary_smoke.csv",
+    "policy_prompt_latency_smoke.csv",
+    "workload_policy_latency_smoke.csv",
+    "lead_time_hit_rate_speedup_smoke.csv",
+    "hit_rate_vs_latency_saving_smoke.csv",
+    "correlation_summary_smoke.json"
+  ],
+  "raw": "experiments/speculative_prefetcher/results/raw_block_timing_smoke.jsonl",
+  "rows": 4600,
+  "status": "ok"
+}

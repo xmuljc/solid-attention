@@ -1,0 +1,53 @@
+{
+  "contract": "solidattention.speculative_prefetcher.config.v1",
+  "model": {
+    "name": "Qwen-2.5-7B",
+    "config_path": ".deps/models/Qwen2.5-7B/config.json",
+    "kv_dtype": "float16",
+    "dtype_bytes": 2
+  },
+  "paths": {
+    "selected_trace": "experiments/figure9_reproduction/results/selected_blocks_trace.jsonl",
+    "trace_manifest": "experiments/figure9_reproduction/results/qwen_selected_blocks_run_manifest.json",
+    "kv_test_file": "experiments/io_progressive_attention/data/qwen_kv_finite_2g.bin",
+    "safe_nvme_root": "experiments/io_progressive_attention/data"
+  },
+  "selection": {
+    "block_tokens": 32,
+    "context_budget_tokens": 1024,
+    "init_local_tokens": 512,
+    "selected_tokens": 512,
+    "selected_k": 16,
+    "init_blocks": [0],
+    "local_blocks": [31],
+    "selection_unit_field": "head_id"
+  },
+  "policies": [
+    "No-Selected-Prefetch",
+    "Random-Same-Volume",
+    "History-Last1",
+    "Past-Frequency",
+    "Oracle"
+  ],
+  "random": {
+    "seed": 20260714,
+    "random_same_volume_seeds": [11, 23, 37, 41, 53],
+    "bootstrap_seed": 20260715
+  },
+  "timing": {
+    "lead_times_ms": [0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0],
+    "main_lead_ms": 1.0,
+    "correction_slack_ms": 0.0,
+    "queue_depth": 4,
+    "queue_depth_sensitivity": [1, 4, 16],
+    "controlled_hit_rates": [0.0, 25.0, 50.0, 62.5, 68.75, 75.0, 81.25, 87.5, 93.75, 100.0],
+    "smoke_events_per_policy": 80,
+    "smoke_controlled_repeats": 20,
+    "formal_iterations_per_config": 1000
+  },
+  "notes": [
+    "This experiment is isolated from llama.cpp.",
+    "Existing Figure 9 Qwen traces are used when selected block IDs are available.",
+    "Current available trace covers the previous eight workloads: gov_report, multifieldqa_en, musique, narrativeqa, qmsum, multi_news, repobench-p, ruler_multikey_alternating."
+  ]
+}
