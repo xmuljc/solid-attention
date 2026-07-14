@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>SolidAttention 机制复现证据图</title>
+<style>body{margin:0;background:#e5e7eb;color:#111827;font-family:"Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif;}main{max-width:1180px;margin:0 auto;padding:32px 20px;}h1{margin:0 0 8px;font-size:30px;}p{color:#475569;margin:0 0 24px;}section{background:white;border:1px solid #cbd5e1;border-radius:8px;margin:0 0 24px;padding:16px;}h2{font-size:18px;margin:0 0 12px;}img{width:100%;height:auto;display:block;}</style>
+</head><body><main><h1>SolidAttention 机制复现证据图</h1><p>这些图不是进度看板，而是由 harness 输出的实验数据直接生成，用于说明论文核心机制已经被复现到可测量状态。</p><section><h2>Init / Local / Selected Blocks 与代表向量选择</h2><img src="01_block_selection_evidence.svg" alt="Init / Local / Selected Blocks 与代表向量选择"/></section>
+<section><h2>推测预取命中与阻塞降低</h2><img src="02_speculative_prefetch_evidence.svg" alt="推测预取命中与阻塞降低"/></section>
+<section><h2>SSD-aware 队列调度</h2><img src="03_ssd_queue_scheduling_evidence.svg" alt="SSD-aware 队列调度"/></section>
+<section><h2>SSD / DRAM / VRAM 三层 KV 调度</h2><img src="04_tier_cache_scheduling_evidence.svg" alt="SSD / DRAM / VRAM 三层 KV 调度"/></section></main></body></html>

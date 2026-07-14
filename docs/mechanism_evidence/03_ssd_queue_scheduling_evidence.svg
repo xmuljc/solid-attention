@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="595" viewBox="0 0 1060 595">
+<rect width="1060" height="595" fill="#f8fafc"/>
+<style>
+text { font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }
+.title { font-size: 25px; font-weight: 700; fill: #111827; }
+.subtitle { font-size: 13px; fill: #64748b; }
+.label { font-size: 13px; fill: #111827; }
+.small { font-size: 11px; fill: #64748b; }
+.value { font-size: 22px; font-weight: 700; fill: #111827; }
+</style>
+<text x="40.00" y="42.00" class="title" text-anchor="start">机制 3：SSD-aware 队列调度</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">同样的 SSD 读请求，在队列深度增加后等待时间降为 0，体现 I/O 调度约束被纳入 harness。</text>
+<rect x="30.00" y="88.00" width="1000.00" height="470.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
+<text x="78.00" y="130.00" class="label" text-anchor="start">队列深度</text>
+<text x="245.00" y="130.00" class="label" text-anchor="start">prefetch=1 等待(ms)</text>
+<text x="535.00" y="130.00" class="label" text-anchor="start">prefetch=2 等待(ms)</text>
+<text x="110.00" y="183.00" class="value" text-anchor="middle">1</text>
+<rect x="245.00" y="165.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="245.00" y="165.00" width="105.00" height="26.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="470.00" y="183.00" class="small" text-anchor="start">0.039493</text>
+<rect x="535.00" y="165.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="535.00" y="165.00" width="210.00" height="26.00" rx="4" fill="#f59e0b" stroke="none"/>
+<text x="760.00" y="183.00" class="small" text-anchor="start">0.078986</text>
+<text x="110.00" y="261.00" class="value" text-anchor="middle">2</text>
+<rect x="245.00" y="243.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="245.00" y="243.00" width="0.00" height="26.00" rx="4" fill="#16a34a" stroke="none"/>
+<text x="470.00" y="261.00" class="small" text-anchor="start">0.000000</text>
+<rect x="535.00" y="243.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="535.00" y="243.00" width="0.00" height="26.00" rx="4" fill="#16a34a" stroke="none"/>
+<text x="760.00" y="261.00" class="small" text-anchor="start">0.000000</text>
+<text x="110.00" y="339.00" class="value" text-anchor="middle">4</text>
+<rect x="245.00" y="321.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="245.00" y="321.00" width="0.00" height="26.00" rx="4" fill="#16a34a" stroke="none"/>
+<text x="470.00" y="339.00" class="small" text-anchor="start">0.000000</text>
+<rect x="535.00" y="321.00" width="210.00" height="26.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="535.00" y="321.00" width="0.00" height="26.00" rx="4" fill="#16a34a" stroke="none"/>
+<text x="760.00" y="339.00" class="small" text-anchor="start">0.000000</text>
+<rect x="80.00" y="430.00" width="260.00" height="82.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="102.00" y="462.00" class="small" text-anchor="start">深度 1</text>
+<text x="102.00" y="492.00" class="value" text-anchor="start">有排队等待</text>
+<rect x="400.00" y="430.00" width="260.00" height="82.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="422.00" y="462.00" class="small" text-anchor="start">深度 2 / 4</text>
+<text x="422.00" y="492.00" class="value" text-anchor="start">等待为 0</text>
+<rect x="720.00" y="430.00" width="240.00" height="82.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="742.00" y="462.00" class="small" text-anchor="start">SSD 读字节</text>
+<text x="742.00" y="492.00" class="value" text-anchor="start">262144</text>
+</svg>

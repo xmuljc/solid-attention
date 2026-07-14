@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="595" viewBox="0 0 1060 595">
+<rect width="1060" height="595" fill="#f8fafc"/>
+<style>
+text { font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }
+.title { font-size: 25px; font-weight: 700; fill: #111827; }
+.subtitle { font-size: 13px; fill: #64748b; }
+.label { font-size: 13px; fill: #111827; }
+.small { font-size: 11px; fill: #64748b; }
+.value { font-size: 22px; font-weight: 700; fill: #111827; }
+</style>
+<text x="40.00" y="42.00" class="title" text-anchor="start">机制 1：Init / Local / Selected Blocks 与代表向量选择</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">同一段 KV block 在不同策略下的角色变化；Selected Blocks 来自代表向量余弦评分。</text>
+<rect x="30.00" y="88.00" width="1000.00" height="470.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
+<text x="70.00" y="125.00" class="label" text-anchor="start">基线策略：Init + Local</text>
+<text x="560.00" y="125.00" class="label" text-anchor="start">代表向量策略：Init + Selected</text>
+<rect x="70.00" y="155.00" width="130.00" height="78.00" rx="8" fill="#0f766e" stroke="none"/>
+<text x="135" y="189" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">块 0</text>
+<text x="135" y="213" font-size="13" fill="#ffffff" text-anchor="middle">Init Block</text>
+<rect x="235.00" y="155.00" width="130.00" height="78.00" rx="8" fill="#f59e0b" stroke="none"/>
+<text x="300" y="189" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">块 64</text>
+<text x="300" y="213" font-size="13" fill="#ffffff" text-anchor="middle">Local Block</text>
+<rect x="560.00" y="155.00" width="130.00" height="78.00" rx="8" fill="#0f766e" stroke="none"/>
+<text x="625" y="189" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">块 0</text>
+<text x="625" y="213" font-size="13" fill="#ffffff" text-anchor="middle">Init Block</text>
+<rect x="725.00" y="155.00" width="130.00" height="78.00" rx="8" fill="#7c3aed" stroke="none"/>
+<text x="790" y="189" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">块 64</text>
+<text x="790" y="213" font-size="13" fill="#ffffff" text-anchor="middle">Selected Block</text>
+<line x1="690.00" y1="250.00" x2="690.00" y2="316.00" stroke="#d9e2ec" stroke-width="2.00"/>
+<text x="560.00" y="292.00" class="label" text-anchor="start">代表向量评分</text>
+<rect x="670.00" y="275.00" width="220.00" height="22.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="670.00" y="275.00" width="155.56" height="22.00" rx="4" fill="#7c3aed" stroke="none"/>
+<text x="900.00" y="292.00" class="small" text-anchor="start">top score = 0.707</text>
+<rect x="70.00" y="350.00" width="260.00" height="120.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="92.00" y="382.00" class="small" text-anchor="start">候选评分次数</text>
+<text x="92.00" y="414.00" class="value" text-anchor="start">144</text>
+<text x="92.00" y="450.00" class="small" text-anchor="start">missing representative = 0</text>
+<rect x="370.00" y="350.00" width="260.00" height="120.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="392.00" y="382.00" class="small" text-anchor="start">Selected 选中次数</text>
+<text x="392.00" y="414.00" class="value" text-anchor="start">144</text>
+<text x="392.00" y="450.00" class="small" text-anchor="start">平均分 0.707</text>
+<rect x="670.00" y="350.00" width="260.00" height="120.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="692.00" y="382.00" class="small" text-anchor="start">验证关系</text>
+<text x="692.00" y="414.00" class="value" text-anchor="start">144 / 144</text>
+<text x="692.00" y="450.00" class="small" text-anchor="start">候选评分与选中数量一致</text>
+</svg>

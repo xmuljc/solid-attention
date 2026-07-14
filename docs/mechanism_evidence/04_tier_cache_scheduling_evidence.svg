@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="625" viewBox="0 0 1060 625">
+<rect width="1060" height="625" fill="#f8fafc"/>
+<style>
+text { font-family: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", Inter, ui-sans-serif, system-ui, sans-serif; }
+.title { font-size: 25px; font-weight: 700; fill: #111827; }
+.subtitle { font-size: 13px; fill: #64748b; }
+.label { font-size: 13px; fill: #111827; }
+.small { font-size: 11px; fill: #64748b; }
+.value { font-size: 22px; font-weight: 700; fill: #111827; }
+</style>
+<text x="40.00" y="42.00" class="title" text-anchor="start">机制 4：SSD / DRAM / VRAM 三层 KV 调度</text>
+<text x="40.00" y="66.00" class="subtitle" text-anchor="start">C++ trace 显示 promotion / eviction / SSD read；容量消融显示 VRAM 容量变大后驱逐和延迟下降。</text>
+<rect x="30.00" y="88.00" width="1000.00" height="500.00" rx="8" fill="#ffffff" stroke="#d9e2ec"/>
+<text x="70.00" y="130.00" class="label" text-anchor="start">C++ 迁移事件类型</text>
+<text x="70.00" y="182.00" class="small" text-anchor="start">SSD→DRAM</text>
+<rect x="210.00" y="165.00" width="260.00" height="24.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="210.00" y="165.00" width="3.61" height="24.00" rx="4" fill="#0f766e" stroke="none"/>
+<text x="485.00" y="182.00" class="small" text-anchor="start">2</text>
+<text x="70.00" y="240.00" class="small" text-anchor="start">DRAM→VRAM</text>
+<rect x="210.00" y="223.00" width="260.00" height="24.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="210.00" y="223.00" width="260.00" height="24.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="485.00" y="240.00" class="small" text-anchor="start">144</text>
+<text x="70.00" y="298.00" class="small" text-anchor="start">VRAM→DRAM 驱逐</text>
+<rect x="210.00" y="281.00" width="260.00" height="24.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="210.00" y="281.00" width="256.39" height="24.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="485.00" y="298.00" class="small" text-anchor="start">142</text>
+<text x="590.00" y="130.00" class="label" text-anchor="start">容量消融：驱逐 / 延迟</text>
+<text x="590.00" y="182.00" class="small" text-anchor="start">DRAM 192KiB / VRAM 128KiB</text>
+<rect x="790.00" y="165.00" width="110.00" height="20.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="165.00" width="110.00" height="20.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="910.00" y="181.00" class="small" text-anchor="start">142 次</text>
+<rect x="790.00" y="190.00" width="110.00" height="12.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="190.00" width="110.00" height="12.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="910.00" y="202.00" class="small" text-anchor="start">71.58 ms</text>
+<text x="590.00" y="240.00" class="small" text-anchor="start">DRAM 256KiB / VRAM 128KiB</text>
+<rect x="790.00" y="223.00" width="110.00" height="20.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="223.00" width="110.00" height="20.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="910.00" y="239.00" class="small" text-anchor="start">142 次</text>
+<rect x="790.00" y="248.00" width="110.00" height="12.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="248.00" width="110.00" height="12.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="910.00" y="260.00" class="small" text-anchor="start">71.58 ms</text>
+<text x="590.00" y="298.00" class="small" text-anchor="start">DRAM 192KiB / VRAM 192KiB</text>
+<rect x="790.00" y="281.00" width="110.00" height="20.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="281.00" width="55.00" height="20.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="910.00" y="297.00" class="small" text-anchor="start">71 次</text>
+<rect x="790.00" y="306.00" width="110.00" height="12.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="306.00" width="55.83" height="12.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="910.00" y="318.00" class="small" text-anchor="start">36.33 ms</text>
+<text x="590.00" y="356.00" class="small" text-anchor="start">DRAM 256KiB / VRAM 192KiB</text>
+<rect x="790.00" y="339.00" width="110.00" height="20.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="339.00" width="55.00" height="20.00" rx="4" fill="#db2777" stroke="none"/>
+<text x="910.00" y="355.00" class="small" text-anchor="start">71 次</text>
+<rect x="790.00" y="364.00" width="110.00" height="12.00" rx="4" fill="#e2e8f0" stroke="none"/><rect x="790.00" y="364.00" width="55.83" height="12.00" rx="4" fill="#2563eb" stroke="none"/>
+<text x="910.00" y="376.00" class="small" text-anchor="start">36.33 ms</text>
+<rect x="70.00" y="410.00" width="260.00" height="95.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="92.00" y="440.00" class="small" text-anchor="start">总迁移事件</text>
+<text x="92.00" y="474.00" class="value" text-anchor="start">288</text>
+<rect x="370.00" y="410.00" width="260.00" height="95.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="392.00" y="440.00" class="small" text-anchor="start">promotion</text>
+<text x="392.00" y="474.00" class="value" text-anchor="start">146</text>
+<rect x="670.00" y="410.00" width="260.00" height="95.00" rx="6" fill="#f1f5f9" stroke="#d9e2ec"/>
+<text x="692.00" y="440.00" class="small" text-anchor="start">eviction</text>
+<text x="692.00" y="474.00" class="value" text-anchor="start">142</text>
+</svg>

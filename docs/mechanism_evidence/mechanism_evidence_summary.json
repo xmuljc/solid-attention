@@ -1,0 +1,32 @@
+{
+  "contract": "solidattention.mechanism_evidence_visuals.v1",
+  "figures": [
+    "01_block_selection_evidence.svg",
+    "02_speculative_prefetch_evidence.svg",
+    "03_ssd_queue_scheduling_evidence.svg",
+    "04_tier_cache_scheduling_evidence.svg"
+  ],
+  "mechanism_metrics": {
+    "baseline_blocking_decisions": 6,
+    "prefetch_blocking_decisions": 4,
+    "prefetch_hits": 2,
+    "representative_candidates": 144,
+    "representative_selected": 144,
+    "tier_event_kind_counts": {
+      "dram_to_vram": 144,
+      "ssd_read": 2,
+      "vram_to_dram_eviction": 142
+    },
+    "tier_trace_event_count": 288,
+    "wrong_prefetches": 0
+  },
+  "source_artifacts": [
+    "outputs/phase5/live_attention_ablation_suite/live_attention_ablation_suite_summary.json",
+    "outputs/phase5/live_attention_ablation_suite/single_runs/representative_prefetch/live_attention_scheduler_metrics.json",
+    "outputs/phase5/live_attention_ablation_suite/single_runs/representative_prefetch/live_attention_scheduler_decisions.jsonl",
+    "outputs/phase5/live_attention_ablation_suite/queue_depth_prefetch_grid/queue_depth_ablation_summary.json",
+    "outputs/phase5/live_attention_ablation_suite/tier_capacity_grid/tier_capacity_ablation_summary.json",
+    "outputs/phase4/tier_policy_handoff/llama_attention_tier_event_kind_parity/runtime_kv_attention_tier_trace.jsonl"
+  ],
+  "status": "ok"
+}
