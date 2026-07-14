@@ -1,5 +1,6 @@
 {
-  "note": "Generated without third-party plotting dependencies. Do not use as formal result.",
+  "font": "experiments/io_progressive_attention/assets/fonts/NotoSansCJKsc-Regular.otf",
+  "note": "Chinese labels are rendered into PNG/PDF with Pillow. These are smoke plots, not formal paper-level results.",
   "outputs": [
     "barrier_vs_progressive_hit_rate_smoke.png",
     "barrier_vs_progressive_hit_rate_smoke.pdf",
@@ -9,5 +10,5 @@
     "latency_breakdown_81pct_smoke.pdf"
   ],
   "status": "ok",
-  "type": "smoke_plots_only"
+  "type": "chinese_smoke_plots"
 }
